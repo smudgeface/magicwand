@@ -11,24 +11,24 @@
     <h3>Detection</h3>
     <div class="form-row">
       <div class="form-group">
-        <label>Threshold (0-255)</label>
+        <label>Threshold (0-255) <button class="tip-btn" data-tip="Brightness cutoff for the binary mask. Pixels above this value are considered 'bright.' Raise it if ambient light triggers false detections; lower it if the wand tip is too dim to detect.">?</button></label>
         <input type="range" id="det-threshold" class="input-range" min="0" max="255" value="240">
         <span id="det-threshold-val" class="range-value">240</span>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Min Area</label>
+        <label>Min Area <button class="tip-btn" data-tip="Minimum blob size (pixels²) to count as a wand tip. Rejects tiny noise specks. Raise if you get jitter from hot pixels; lower if the tip is far away and appears small.">?</button></label>
         <input type="number" id="det-min-area" class="input" value="20" min="1" max="10000">
       </div>
       <div class="form-group">
-        <label>Max Area</label>
+        <label>Max Area <button class="tip-btn" data-tip="Maximum blob size (pixels²). Rejects large bright regions (lamps, windows). Lower if a nearby light source keeps triggering detection.">?</button></label>
         <input type="number" id="det-max-area" class="input" value="5000" min="1" max="100000">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Blur Kernel</label>
+        <label>Blur Kernel <button class="tip-btn" data-tip="Gaussian blur applied before thresholding. Higher = smoother image, less noise, but slightly less precise tip position. Usually leave at 5.">?</button></label>
         <select id="det-blur" class="input">
           <option value="3">3</option>
           <option value="5" selected>5</option>
@@ -37,7 +37,7 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Trail Length</label>
+        <label>Trail Length <button class="tip-btn" data-tip="Number of recent positions shown in the trail overlay on the feed. Visual only — doesn't affect detection or matching.">?</button></label>
         <input type="number" id="det-trail" class="input" value="50" min="5" max="200">
       </div>
     </div>
@@ -50,28 +50,55 @@
     <h3>Matching</h3>
     <div class="form-row">
       <div class="form-group">
-        <label>Distance Threshold</label>
+        <label>Distance Threshold <button class="tip-btn" data-tip="Maximum DTW distance for a match. Lower = stricter matching (fewer false positives, more missed gestures). Higher = more forgiving (easier to match, but might confuse similar gestures).">?</button></label>
         <input type="number" id="match-dist" class="input" value="2.0" min="0.5" max="5.0" step="0.1">
       </div>
       <div class="form-group">
-        <label>Min Confidence</label>
+        <label>Min Confidence <button class="tip-btn" data-tip="Minimum confidence (0-1) to accept a match. Confidence = how much better the best match is than the threshold. Raise if you get false matches; lower if good gestures are being rejected.">?</button></label>
         <input type="number" id="match-conf" class="input" value="0.6" min="0.0" max="1.0" step="0.05">
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Gap Timeout (s)</label>
+        <label>Gap Timeout (s) <button class="tip-btn" data-tip="How long the tip must disappear before the gesture is considered 'done.' Lower = faster response after gesture. Higher = more tolerant of brief tracking loss mid-gesture.">?</button></label>
         <input type="number" id="match-gap" class="input" value="0.5" min="0.1" max="2.0" step="0.1">
       </div>
       <div class="form-group">
-        <label>Cooldown (s)</label>
+        <label>Cooldown (s) <button class="tip-btn" data-tip="Dead time after a match attempt before watching for the next gesture. Prevents double-triggers and ignores the 'put wand down' motion.">?</button></label>
         <input type="number" id="match-cooldown" class="input" value="2.0" min="0.5" max="10.0" step="0.5">
       </div>
     </div>
     <div class="form-group">
-      <label>Min Gesture Points</label>
+      <label>Min Gesture Points <button class="tip-btn" data-tip="Minimum number of tracked points to consider a motion as a possible gesture. At 30 FPS, 10 points = 0.33 seconds. Raise if very brief motions trigger false matches.">?</button></label>
       <input type="number" id="match-min-pts" class="input" value="10" min="5" max="50">
     </div>
+
+    <h4 style="color:#8888aa; margin: 1.5rem 0 0.75rem; font-weight: 400;">Segmentation</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Dwell Speed <button class="tip-btn" data-tip="Speed threshold (normalized units/sec) below which the wand is considered 'paused.' Used to find the start/end of intentional gestures. Lower = more sensitive to tiny movements during pauses.">?</button></label>
+        <input type="number" id="match-dwell-speed" class="input" value="0.05" min="0.01" max="0.5" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Dwell Min Points <button class="tip-btn" data-tip="Minimum consecutive slow frames to count as a 'dwell' (pause). Lower = detects shorter pauses. Higher = requires a longer hold to split segments.">?</button></label>
+        <input type="number" id="match-dwell-pts" class="input" value="3" min="2" max="10">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Linearity (R²) <button class="tip-btn" data-tip="How straight a segment can be before it's discarded as an entry/exit trail. 1.0 = perfectly straight. Segments with R² above this are filtered out. Lower = stricter (rejects slightly curved trails too).">?</button></label>
+        <input type="number" id="match-linearity" class="input" value="0.85" min="0.5" max="0.99" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Min Curvature (rad) <button class="tip-btn" data-tip="Minimum total angle change (radians) for a segment to be considered a gesture. π/2 (1.57) = a 90° turn total. A circle has ~6.28. Segments with less curvature are discarded as too simple. Lower = accepts simpler shapes.">?</button></label>
+        <input type="number" id="match-curvature" class="input" value="1.57" min="0.1" max="6.28" step="0.1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Min Duration (s) <button class="tip-btn" data-tip="Minimum time a segment must last to be a gesture candidate. Filters out brief accidental motions between dwells. Lower = accepts faster gestures.">?</button></label>
+      <input type="number" id="match-min-dur" class="input" value="0.2" min="0.05" max="2.0" step="0.05">
+    </div>
+
     <button id="btn-apply-matching" class="btn btn-primary">Apply</button>
     <span id="match-status" class="setting-status"></span>
   </section>
@@ -91,8 +118,37 @@
     </div>
   </section>
 </main>
+
+<!-- Tooltip overlay -->
+<div id="tip-overlay" class="tip-overlay" style="display:none">
+  <div class="tip-content">
+    <p id="tip-text"></p>
+    <button id="tip-close" class="btn btn-secondary btn-sm">Got it</button>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/settings.js"></script>
+<script>
+(function() {
+  const overlay = document.getElementById('tip-overlay');
+  const tipText = document.getElementById('tip-text');
+  const tipClose = document.getElementById('tip-close');
+
+  document.querySelectorAll('.tip-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tipText.textContent = btn.dataset.tip;
+      overlay.style.display = '';
+    });
+  });
+
+  tipClose.addEventListener('click', () => { overlay.style.display = 'none'; });
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.style.display = 'none';
+  });
+})();
+</script>
 {% endblock %}

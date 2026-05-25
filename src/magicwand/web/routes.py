@@ -41,9 +41,9 @@ async def gesture_detail_page(request: Request, name: str) -> HTMLResponse:
     return templates.TemplateResponse(request, "gesture-detail.html", {"name": name})
 
 
-@router.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request) -> HTMLResponse:
-    """Render the settings page."""
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request) -> HTMLResponse:
+    """Render the admin page."""
     return templates.TemplateResponse(request, "settings.html")
 
 
@@ -132,11 +132,19 @@ async def system_info(request: Request) -> dict:
 
 @router.put("/api/settings/detection")
 async def update_detection_settings(request: Request) -> dict:
-    """Update detection parameters at runtime."""
+    """Update detection parameters at runtime and persist to config.toml."""
+    from magicwand.config import get_config, save_config
     body = await request.json()
     detector = request.app.state.detector
     detector.update_config(**body)
     cfg = detector._config
+    app_cfg = get_config()
+    app_cfg.detection.threshold = cfg.threshold
+    app_cfg.detection.min_area = cfg.min_area
+    app_cfg.detection.max_area = cfg.max_area
+    app_cfg.detection.blur_kernel = cfg.blur_kernel
+    app_cfg.detection.trail_length = cfg.trail_length
+    save_config()
     return {
         "threshold": cfg.threshold,
         "min_area": cfg.min_area,
@@ -302,13 +310,18 @@ async def matching_status(request: Request) -> dict:
 
 @router.put("/api/settings/matching")
 async def update_matching_settings(request: Request) -> dict:
-    """Update gesture matching parameters at runtime."""
+    """Update gesture matching parameters at runtime and persist to config.toml."""
+    from magicwand.config import get_config, save_config
     body = await request.json()
     watcher = request.app.state.watcher
     cfg = watcher._config
     for key, value in body.items():
         if hasattr(cfg, key):
             setattr(cfg, key, value)
+    app_cfg = get_config()
+    for key in vars(app_cfg.matching):
+        setattr(app_cfg.matching, key, getattr(cfg, key))
+    save_config()
     return {
         "distance_threshold": cfg.distance_threshold,
         "min_confidence": cfg.min_confidence,
@@ -316,6 +329,11 @@ async def update_matching_settings(request: Request) -> dict:
         "cooldown_time": cfg.cooldown_time,
         "min_gesture_points": cfg.min_gesture_points,
         "resample_count": cfg.resample_count,
+        "dwell_speed_threshold": cfg.dwell_speed_threshold,
+        "dwell_min_points": cfg.dwell_min_points,
+        "linearity_threshold": cfg.linearity_threshold,
+        "min_curvature": cfg.min_curvature,
+        "min_segment_duration": cfg.min_segment_duration,
     }
 
 

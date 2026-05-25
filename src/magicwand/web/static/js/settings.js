@@ -71,6 +71,11 @@
         gap_timeout: parseFloat(document.getElementById('match-gap').value),
         cooldown_time: parseFloat(document.getElementById('match-cooldown').value),
         min_gesture_points: parseInt(document.getElementById('match-min-pts').value),
+        dwell_speed_threshold: parseFloat(document.getElementById('match-dwell-speed').value),
+        dwell_min_points: parseInt(document.getElementById('match-dwell-pts').value),
+        linearity_threshold: parseFloat(document.getElementById('match-linearity').value),
+        min_curvature: parseFloat(document.getElementById('match-curvature').value),
+        min_segment_duration: parseFloat(document.getElementById('match-min-dur').value),
       };
       try {
         await fetch('/api/settings/matching', {
