@@ -24,6 +24,8 @@
       appendEvent(data);
     };
 
+    ws.onerror = () => { ws.close(); };
+
     ws.onclose = () => {
       const indicator = document.getElementById('ws-status');
       if (indicator) { indicator.textContent = 'disconnected'; indicator.className = 'ws-status disconnected'; }

@@ -62,7 +62,7 @@ async def system_info(request: Request) -> dict:
     # Uptime
     uptime = round(time.monotonic() - _start_time, 1)
 
-    # CPU temp (Pi-specific, returns null on Mac)
+    # CPU temp — Linux: /sys/class/thermal, macOS: not available without extras
     cpu_temp = None
     try:
         with open("/sys/class/thermal/thermal_zone0/temp") as f:
@@ -70,7 +70,8 @@ async def system_info(request: Request) -> dict:
     except (FileNotFoundError, ValueError):
         pass
 
-    # RAM (cross-platform via /proc/meminfo or rough estimate)
+    # RAM — Linux: /proc/meminfo, macOS: sysctl + vm_stat
+    import subprocess
     ram_used = None
     ram_total = None
     try:
@@ -83,8 +84,25 @@ async def system_info(request: Request) -> dict:
             ram_total = round(meminfo.get("MemTotal", 0) / 1024, 0)
             available = meminfo.get("MemAvailable", 0)
             ram_used = round((meminfo.get("MemTotal", 0) - available) / 1024, 0)
-    except (FileNotFoundError, ValueError):
-        pass
+    except FileNotFoundError:
+        try:
+            out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)
+            ram_total = round(int(out.strip()) / (1024 * 1024))
+            vm = subprocess.check_output(["vm_stat"], text=True)
+            pages = {}
+            for line in vm.strip().splitlines()[1:]:
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    v = v.strip().rstrip(".")
+                    if v.isdigit():
+                        pages[k.strip()] = int(v)
+            page_size = 16384
+            free_pages = pages.get("Pages free", 0) + pages.get("Pages speculative", 0)
+            inactive = pages.get("Pages inactive", 0)
+            ram_free = round((free_pages + inactive) * page_size / (1024 * 1024))
+            ram_used = ram_total - ram_free
+        except (subprocess.SubprocessError, ValueError, OSError):
+            pass
 
     # Disk
     import shutil
