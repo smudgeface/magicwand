@@ -5,7 +5,7 @@ async def test_settings_page_loads(client):
     """Settings page serves correctly."""
     resp = await client.get("/settings")
     assert resp.status_code == 200
-    assert "Settings" in resp.text
+    assert "Admin" in resp.text
     assert "Detection" in resp.text
     assert "Matching" in resp.text
     assert "System" in resp.text

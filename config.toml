@@ -30,6 +30,12 @@ gap_timeout = 0.5
 cooldown_time = 2.0
 min_gesture_points = 10
 resample_count = 32
+dwell_speed_threshold = 0.05
+dwell_trim_enabled = true
+
+[captures]
+directory = "captures"
+max_captures = 200
 
 [logging]
 directory = "logs"

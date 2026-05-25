@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set active_page = "captures" %}
+{% block title %}Captures — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <div class="page-header">
+    <h2>Capture History</h2>
+    <div>
+      <span id="retention-info" class="badge">Max: 200</span>
+      <button id="btn-clear" class="btn btn-danger btn-sm">Clear All</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="matched">Matched</button>
+    <button class="filter-btn" data-filter="unmatched">Unmatched</button>
+  </div>
+
+  <div id="captures-list" class="captures-list">
+    <!-- Populated by JS -->
+  </div>
+
+  <div id="empty-state" class="empty-state" style="display:none">
+    <p>No gesture captures yet. Perform gestures in front of the camera to see them here.</p>
+  </div>
+
+  <!-- Detail modal/panel -->
+  <div id="capture-detail" class="capture-detail-panel" style="display:none">
+    <div class="detail-header">
+      <h3>Capture #<span id="detail-id"></span></h3>
+      <button id="btn-close-detail" class="btn btn-secondary btn-sm">Close</button>
+    </div>
+    <div class="detail-body">
+      <div id="detail-svg" class="detail-svg"></div>
+      <div class="detail-info">
+        <div class="info-row"><span class="info-label">Time</span><span id="detail-time"></span></div>
+        <div class="info-row"><span class="info-label">Points</span><span id="detail-points"></span></div>
+        <div class="info-row"><span class="info-label">Duration</span><span id="detail-duration"></span></div>
+        <div class="info-row"><span class="info-label">Trimmed</span><span id="detail-trimmed"></span></div>
+        <div class="info-row"><span class="info-label">Match</span><span id="detail-match"></span></div>
+        <div class="info-row"><span class="info-label">Confidence</span><span id="detail-confidence"></span></div>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gestures.js"></script>
+<script src="/static/js/captures.js"></script>
+{% endblock %}

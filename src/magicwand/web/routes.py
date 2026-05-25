@@ -374,6 +374,59 @@ async def get_logs(request: Request, since: str = None, type: str = None, limit:
     return event_bus.read_logs(since=since, event_type=type, limit=limit)
 
 
+@router.get("/captures", response_class=HTMLResponse)
+async def captures_page(request: Request) -> HTMLResponse:
+    """Render the capture history page."""
+    return templates.TemplateResponse(request, "captures.html")
+
+
+# ---------------------------------------------------------------------------
+# Capture endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/captures")
+async def list_captures(
+    request: Request, limit: int = 50, offset: int = 0, matched: str = None
+) -> dict:
+    """Return recent captures, optionally filtered by match status."""
+    store = request.app.state.capture_store
+    if matched == "true":
+        captures = store.list(limit=limit, offset=offset, matched_only=True)
+    elif matched == "false":
+        captures = store.list(limit=limit, offset=offset, unmatched_only=True)
+    else:
+        captures = store.list(limit=limit, offset=offset)
+    return {"captures": captures}
+
+
+@router.get("/api/captures/{capture_id}")
+async def get_capture(request: Request, capture_id: int) -> dict:
+    """Return a single capture by ID, including full point data."""
+    store = request.app.state.capture_store
+    capture = store.get(capture_id)
+    if capture is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return capture
+
+
+@router.delete("/api/captures")
+async def clear_captures(request: Request) -> dict:
+    """Delete all captures and return the count removed."""
+    store = request.app.state.capture_store
+    count = store.clear()
+    return {"cleared": count}
+
+
+@router.put("/api/settings/captures")
+async def update_captures_settings(request: Request) -> dict:
+    """Update capture retention settings at runtime."""
+    body = await request.json()
+    store = request.app.state.capture_store
+    if "max_captures" in body:
+        store.set_max(int(body["max_captures"]))
+    return {"max_captures": store._max}
+
+
 @router.get("/api/homebridge/presets")
 async def homebridge_presets(request: Request) -> list[dict]:
     """Return available Homebridge presets with host/port filled in."""
