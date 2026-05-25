@@ -42,6 +42,21 @@ in a GPU.
 - Configuration in a single file (yaml or toml) at the repo root, not
   scattered env vars.
 
+## Running the app locally
+
+```bash
+source .venv/bin/activate && python -m magicwand.main
+```
+
+**Before starting the app, kill any existing instance:**
+```bash
+kill $(lsof -ti :8000) 2>/dev/null; source .venv/bin/activate && python -m magicwand.main
+```
+
+The app has a port-conflict check that will exit with a clear error if port
+8000 is already in use. If you see that error, kill the existing process first.
+Multiple instances cause silent failures (the second binds to nothing and hangs).
+
 ## Documentation
 
 - `docs/implementation-plan.md` — phased build plan. Read this before starting

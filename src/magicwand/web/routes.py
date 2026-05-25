@@ -9,12 +9,50 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+from magicwand.config import MatchingConfig
+from magicwand.gestures import GesturePoint
+from magicwand.matching import extract_gesture_candidates, segment_at_dwells
+
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 router = APIRouter()
 
 _start_time = time.monotonic()
+
+
+def _compute_segment_labels(
+    points: list[GesturePoint], cfg: MatchingConfig, frame_width: int
+) -> list[str]:
+    """Classify each point as 'dwell', 'gesture', or 'trail'."""
+    if len(points) < 2:
+        return ["gesture"] * len(points)
+
+    segments = segment_at_dwells(
+        points, cfg.dwell_speed_threshold, cfg.dwell_min_points, frame_width
+    )
+    candidates = extract_gesture_candidates(
+        points,
+        speed_threshold=cfg.dwell_speed_threshold,
+        min_dwell_points=cfg.dwell_min_points,
+        min_points=cfg.min_gesture_points,
+        min_duration=cfg.min_segment_duration,
+        linearity_threshold=cfg.linearity_threshold,
+        min_curvature=cfg.min_curvature,
+        frame_width=frame_width,
+    )
+    candidate_sets = [{(p.x, p.y, p.t) for p in c} for c in candidates]
+
+    labels: list[str] = []
+    for seg in segments:
+        for pt in seg.points:
+            if seg.is_dwell:
+                labels.append("dwell")
+            elif any((pt.x, pt.y, pt.t) in cs for cs in candidate_sets):
+                labels.append("gesture")
+            else:
+                labels.append("trail")
+    return labels
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -206,16 +244,26 @@ async def create_gesture(request: Request) -> dict:
 
 @router.get("/api/gestures/{name}")
 async def get_gesture(request: Request, name: str) -> dict:
-    """Return full gesture detail including all samples."""
+    """Return full gesture detail including all samples with segment labels."""
     store = request.app.state.gesture_store
     g = store.get(name)
     if g is None:
         return JSONResponse({"error": "not found"}, status_code=404)
+
+    cfg = request.app.state.watcher._config
+    fw = request.app.state.watcher._frame_width
+
+    samples_out = []
+    for sample in g.samples:
+        pts_dicts = [{"x": p.x, "y": p.y, "t": p.t} for p in sample]
+        labels = _compute_segment_labels(sample, cfg, fw)
+        samples_out.append({"points": pts_dicts, "segment_labels": labels})
+
     return {
         "name": g.name,
         "created_at": g.created_at,
         "sample_count": len(g.samples),
-        "samples": [[{"x": p.x, "y": p.y, "t": p.t} for p in s] for s in g.samples],
+        "samples": samples_out,
         "action": g.action,
     }
 
@@ -231,13 +279,38 @@ async def delete_gesture(request: Request, name: str) -> dict:
 
 @router.post("/api/gestures/{name}/samples", status_code=201)
 async def add_sample(request: Request, name: str) -> dict:
-    """Add a recorded sample to an existing gesture."""
+    """Add a recorded sample to an existing gesture.
+
+    Runs segmentation to extract only the gesture portion before storing.
+    """
     store = request.app.state.gesture_store
     body = await request.json()
-    from magicwand.gestures import GesturePoint
     sample = [GesturePoint(x=p["x"], y=p["y"], t=p["t"]) for p in body]
+
+    cfg = request.app.state.watcher._config
+    fw = request.app.state.watcher._frame_width
+    candidates = extract_gesture_candidates(
+        sample,
+        speed_threshold=cfg.dwell_speed_threshold,
+        min_dwell_points=cfg.dwell_min_points,
+        min_points=cfg.min_gesture_points,
+        min_duration=cfg.min_segment_duration,
+        linearity_threshold=cfg.linearity_threshold,
+        min_curvature=cfg.min_curvature,
+        frame_width=fw,
+    )
+
+    if not candidates:
+        return JSONResponse(
+            {"error": "No gesture segment found — try a more curved motion"},
+            status_code=400,
+        )
+
+    # Use the longest candidate as the training sample
+    best = max(candidates, key=len)
+
     try:
-        count = store.add_sample(name, sample)
+        count = store.add_sample(name, best)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=404)
     return {"sample_count": count}
@@ -286,6 +359,14 @@ async def stop_recording(request: Request) -> dict:
         "sample": [{"x": p.x, "y": p.y, "t": p.t} for p in sample],
         "point_count": len(sample),
     }
+
+
+@router.post("/api/recording/discard")
+async def discard_recording(request: Request) -> dict:
+    """Discard the current recording and return to IDLE state."""
+    recorder = request.app.state.recorder
+    recorder.discard()
+    return {"state": recorder.state.value}
 
 
 # ---------------------------------------------------------------------------
@@ -433,11 +514,19 @@ async def list_captures(
 
 @router.get("/api/captures/{capture_id}")
 async def get_capture(request: Request, capture_id: int) -> dict:
-    """Return a single capture by ID, including full point data."""
+    """Return a single capture by ID, including full point data and segment labels."""
     store = request.app.state.capture_store
     capture = store.get(capture_id)
     if capture is None:
         return JSONResponse({"error": "not found"}, status_code=404)
+
+    raw = capture.get("raw_points", [])
+    if len(raw) >= 2:
+        cfg = request.app.state.watcher._config
+        fw = request.app.state.watcher._frame_width
+        gpts = [GesturePoint(x=p["x"], y=p["y"], t=p["t"]) for p in raw]
+        capture["segment_labels"] = _compute_segment_labels(gpts, cfg, fw)
+
     return capture
 
 

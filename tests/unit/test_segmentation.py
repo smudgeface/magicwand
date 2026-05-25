@@ -68,6 +68,17 @@ class TestSegmentAtDwells:
         non_dwell = [s for s in segments if not s.is_dwell]
         assert len(non_dwell) == 1
 
+    def test_short_dwell_merged_into_motion(self):
+        """A brief pause (< min_dwell_points) mid-gesture merges into motion."""
+        motion1 = _make_line_motion(15, start_x=0.1, start_t=0.0)
+        brief_pause = _make_dwell(2, x=0.85, start_t=15 * 0.033)
+        motion2 = _make_line_motion(15, start_x=0.85, start_t=17 * 0.033)
+        pts = motion1 + brief_pause + motion2
+        segments = segment_at_dwells(pts, speed_threshold=50.0, min_dwell_points=5)
+        motion_segs = [s for s in segments if not s.is_dwell]
+        assert len(motion_segs) == 1
+        assert len(motion_segs[0].points) >= 30
+
 
 class TestLinearity:
     def test_straight_line_is_linear(self):
@@ -115,7 +126,7 @@ class TestExtractGestureCandidates:
 
     def test_all_linear_no_candidates(self):
         """A straight entry/exit with no gesture yields no candidates."""
-        pts = _make_dwell(5) + _make_line_motion(30, start_t=5 * 0.033) + _make_dwell(5, start_t=35 * 0.033)
+        pts = _make_dwell(5) + _make_line_motion(30, start_x=0.5, start_t=5 * 0.033) + _make_dwell(5, x=0.5 + 30 * 0.05, start_t=35 * 0.033)
         candidates = extract_gesture_candidates(pts, min_curvature=1.0)
         assert len(candidates) == 0
 

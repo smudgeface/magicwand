@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import queue
+import socket
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -178,11 +180,36 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     app.include_router(stream_router)
     app.include_router(ws_router)
 
+    @app.middleware("http")
+    async def no_cache_static(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+
     return app
 
 
 # Module-level app instance for `uvicorn magicwand.main:app`.
 app = create_app()
+
+
+def _check_port_available(host: str, port: int) -> None:
+    """Exit with a clear error if the port is already in use by another process."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host if host != "0.0.0.0" else "127.0.0.1", port))
+    except OSError:
+        print(
+            f"\n[ERROR] Port {port} is already in use.\n"
+            f"Kill the existing process: kill $(lsof -ti :{port})\n"
+            f"Or find it: ps aux | grep magicwand\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    finally:
+        sock.close()
 
 
 def run() -> None:
@@ -192,6 +219,7 @@ def run() -> None:
         format="%(asctime)s %(levelname)s %(name)s — %(message)s",
     )
     cfg = get_config()
+    _check_port_available(cfg.server.host, cfg.server.port)
     uvicorn.run(
         "magicwand.main:app",
         host=cfg.server.host,

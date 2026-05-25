@@ -19,7 +19,14 @@
       g.samples.forEach((sample, i) => {
         const card = document.createElement('div');
         card.className = 'sample-card';
-        const svg = renderGestureSVG(sample, { width: 100, height: 100 });
+        const pts = sample.points || sample;
+        const labels = sample.segment_labels || null;
+        let svg;
+        if (labels && typeof renderSegmentedSVG === 'function') {
+          svg = renderSegmentedSVG(pts, labels, { width: 100, height: 100 });
+        } else {
+          svg = renderGestureSVG(pts, { width: 100, height: 100 });
+        }
         if (svg instanceof Element) card.appendChild(svg);
 
         const removeBtn = document.createElement('button');

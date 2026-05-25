@@ -214,17 +214,27 @@ def segment_at_dwells(
         Segment(points=seg_points, is_dwell=is_dwell, avg_speed=avg_spd)
     )
 
-    # Merge short non-dwell runs into adjacent dwells (noise)
-    # A moving segment with fewer than min_dwell_points is probably noise within a dwell
+    # Merge short non-dwell runs into adjacent dwells (noise/jitter within a pause).
+    # Only merge if the segment is also slow — a short but fast motion is a real trail.
     merged = []
     for seg in segments:
-        if not seg.is_dwell and len(seg.points) < min_dwell_points:
+        if (not seg.is_dwell
+            and len(seg.points) < min_dwell_points
+            and seg.avg_speed < speed_threshold * 2):
             seg = Segment(points=seg.points, is_dwell=True, avg_speed=seg.avg_speed)
         merged.append(seg)
 
+    # Merge short dwell runs back into motion (brief speed jitter, not real pauses).
+    # Use a low fixed threshold (3 pts ≈ 0.1s) — real pauses are longer.
+    merged2 = []
+    for seg in merged:
+        if seg.is_dwell and len(seg.points) < 3:
+            seg = Segment(points=seg.points, is_dwell=False, avg_speed=seg.avg_speed)
+        merged2.append(seg)
+
     # Collapse adjacent same-label segments
-    collapsed = [merged[0]]
-    for seg in merged[1:]:
+    collapsed = [merged2[0]]
+    for seg in merged2[1:]:
         if seg.is_dwell == collapsed[-1].is_dwell:
             combined_pts = collapsed[-1].points + seg.points
             combined_spd = (collapsed[-1].avg_speed + seg.avg_speed) / 2
@@ -308,7 +318,7 @@ def extract_gesture_candidates(
     min_dwell_points: int = 3,
     min_points: int = 10,
     min_duration: float = 0.2,
-    linearity_threshold: float = 0.85,
+    linearity_threshold: float = 0.95,
     min_curvature: float = 1.57,
     frame_width: int = 640,
 ) -> list[list[GesturePoint]]:
@@ -337,14 +347,14 @@ def extract_gesture_candidates(
         if duration < min_duration:
             continue
 
-        # Too linear (entry/exit trails are straight swings)
         r_squared = linearity(pts)
-        if r_squared > linearity_threshold:
-            continue
-
-        # Too little curvature
         curvature = total_curvature(pts)
-        if curvature < min_curvature:
+        # Near-perfect linearity means it's a straight trail — any measured
+        # curvature is detection noise, not intentional direction changes.
+        if r_squared > 0.98:
+            continue
+        # Moderately linear + low curvature = likely a trail
+        if r_squared > linearity_threshold and curvature < min_curvature:
             continue
 
         candidates.append(pts)
@@ -525,22 +535,24 @@ class GestureWatcher:
             self._cooldown_until = time.monotonic() + self._config.cooldown_time
             return result
 
-        # Try each candidate until one matches
-        last_result: MatchResult | None = None
+        # Try all candidates, keep the strongest match
+        best_match: MatchResult | None = None
+        best_nomatch: MatchResult | None = None
         for candidate in candidates:
             preprocessed = preprocess(candidate, self._config.resample_count)
             result = self._compare_against_store(preprocessed)
             if result.matched:
-                if self._capture_store:
-                    self._capture_store.add(self._points, result, trimmed_count)
-                return result
-            last_result = result
+                if best_match is None or result.distance < best_match.distance:
+                    best_match = result
+            else:
+                if best_nomatch is None or result.distance < best_nomatch.distance:
+                    best_nomatch = result
 
-        # No candidate matched — return the last comparison result
-        assert last_result is not None
+        final = best_match if best_match is not None else best_nomatch
+        assert final is not None
         if self._capture_store:
-            self._capture_store.add(self._points, last_result, trimmed_count)
-        return last_result
+            self._capture_store.add(self._points, final, trimmed_count)
+        return final
 
     def _compare_against_store(
         self, preprocessed: list[tuple[float, float]]

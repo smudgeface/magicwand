@@ -55,7 +55,7 @@ class MatchingConfig:
     resample_count: int = 32
     dwell_speed_threshold: float = 50.0
     dwell_min_points: int = 3
-    linearity_threshold: float = 0.85
+    linearity_threshold: float = 0.95
     min_curvature: float = 1.57
     min_segment_duration: float = 0.2
 
