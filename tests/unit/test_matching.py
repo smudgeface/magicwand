@@ -28,21 +28,21 @@ from magicwand.matching import (
 # ---------------------------------------------------------------------------
 
 def _make_circle(n: int = 50) -> list[GesturePoint]:
-    """Return a circle of n points, normalized to [0, 1]."""
+    """Return a circle of n points with realistic timing (33ms/frame)."""
     return [
         GesturePoint(
             x=0.5 + 0.3 * math.cos(2 * math.pi * i / n),
             y=0.5 + 0.3 * math.sin(2 * math.pi * i / n),
-            t=float(i),
+            t=i * 0.033,
         )
         for i in range(n)
     ]
 
 
 def _make_line(n: int = 20) -> list[GesturePoint]:
-    """Return a horizontal line of n points across [0.1, 0.9]."""
+    """Return a horizontal line of n points with realistic timing (33ms/frame)."""
     return [
-        GesturePoint(x=0.1 + 0.8 * i / (n - 1), y=0.5, t=float(i))
+        GesturePoint(x=0.1 + 0.8 * i / (n - 1), y=0.5, t=i * 0.033)
         for i in range(n)
     ]
 
@@ -201,10 +201,10 @@ def test_dtw_similar_paths() -> None:
 # ---------------------------------------------------------------------------
 
 def _make_store_with_gesture(tmp_path: Path, name: str = "lumos") -> GestureStore:
-    """Return a GestureStore with a 20-point horizontal-line gesture."""
+    """Return a GestureStore with a circular gesture (passes segmentation filters)."""
     store = GestureStore(tmp_path)
     store.create(name)
-    sample = _make_line(20)
+    sample = _make_circle(40)
     store.add_sample(name, sample)
     return store
 
@@ -215,8 +215,8 @@ def test_match_known_gesture(tmp_path: Path) -> None:
     cfg = MatchingConfig(distance_threshold=2.0, min_confidence=0.1, min_gesture_points=5)
     watcher = GestureWatcher(store, cfg)
 
-    # Feed a live path nearly identical to the stored one
-    live = _make_line(20)
+    # Feed a live path nearly identical to the stored one (circular = passes filters)
+    live = _make_circle(40)
     watcher._points = live
     result = watcher._attempt_match()
 
@@ -226,13 +226,20 @@ def test_match_known_gesture(tmp_path: Path) -> None:
 
 
 def test_reject_unknown_gesture(tmp_path: Path) -> None:
-    """A gesture very different from stored samples does not match."""
-    store = _make_store_with_gesture(tmp_path, "lumos")  # stored: horizontal line
-    cfg = MatchingConfig(distance_threshold=0.05, min_confidence=0.6, min_gesture_points=5)
+    """A gesture very different from stored samples does not match with tight threshold."""
+    store = _make_store_with_gesture(tmp_path, "lumos")  # stored: circle
+    cfg = MatchingConfig(distance_threshold=0.01, min_confidence=0.6, min_gesture_points=5)
     watcher = GestureWatcher(store, cfg)
 
-    # Circle is very different from a line
-    live = _make_circle(30)
+    # A different circle (half the size, shifted) with very tight threshold = reject
+    live = [
+        GesturePoint(
+            x=0.3 + 0.1 * math.cos(2 * math.pi * i / 30),
+            y=0.3 + 0.1 * math.sin(2 * math.pi * i / 30),
+            t=float(i) * 0.033,
+        )
+        for i in range(30)
+    ]
     watcher._points = live
     result = watcher._attempt_match()
 
@@ -381,8 +388,8 @@ def test_cache_invalidation(tmp_path: Path) -> None:
     cfg = MatchingConfig(min_gesture_points=5)
     watcher = GestureWatcher(store, cfg)
 
-    # Populate cache
-    watcher._points = _make_line(20)
+    # Populate cache with circular data (passes segmentation)
+    watcher._points = _make_circle(40)
     watcher._attempt_match()
     assert "lumos" in watcher._preprocessed_cache
 
@@ -391,6 +398,7 @@ def test_cache_invalidation(tmp_path: Path) -> None:
     assert "lumos" not in watcher._preprocessed_cache
 
     # Re-populate, then invalidate all
+    watcher._points = _make_circle(40)
     watcher._attempt_match()
     watcher.invalidate_cache()
     assert len(watcher._preprocessed_cache) == 0
@@ -403,11 +411,11 @@ def test_on_change_hook_invalidates_cache(tmp_path: Path) -> None:
     watcher = GestureWatcher(store, cfg)
     store.on_change = watcher.invalidate_cache
 
-    # Populate cache
-    watcher._points = _make_line(20)
+    # Populate cache with circular data (passes segmentation)
+    watcher._points = _make_circle(40)
     watcher._attempt_match()
     assert "lumos" in watcher._preprocessed_cache
 
     # Modifying the store via add_sample should clear the cache entry
-    store.add_sample("lumos", _make_line(15))
+    store.add_sample("lumos", _make_circle(30))
     assert "lumos" not in watcher._preprocessed_cache

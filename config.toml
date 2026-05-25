@@ -6,11 +6,14 @@ port = 8000
 width = 640
 height = 480
 fps = 30
-# "picamera2" for real hardware, "mock" for development
-source = "mock"
+# "auto" tries webcam then picamera2 then mock
+# "webcam" for USB/UVC camera, "picamera2" for Pi, "mock" for fake data
+source = "auto"
+# Webcam settings (used when source is "webcam" or "auto" detects one)
+webcam_device = 0
+# webcam_exposure = -6.0  # uncomment to set manual exposure (negative = darker)
 
 [camera.mock]
-# Speed multiplier for the figure-8 animation (higher = faster dot)
 dot_speed = 2.0
 
 [detection]
@@ -31,7 +34,10 @@ cooldown_time = 2.0
 min_gesture_points = 10
 resample_count = 32
 dwell_speed_threshold = 0.05
-dwell_trim_enabled = true
+dwell_min_points = 3
+linearity_threshold = 0.85
+min_curvature = 1.57
+min_segment_duration = 0.2
 
 [captures]
 directory = "captures"

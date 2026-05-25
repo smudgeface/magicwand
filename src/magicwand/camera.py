@@ -255,13 +255,85 @@ class CameraThread(threading.Thread):
 
 
 # ---------------------------------------------------------------------------
+# WebcamCamera
+# ---------------------------------------------------------------------------
+
+class WebcamCamera:
+    """OpenCV VideoCapture source for USB/UVC webcams (Mac development)."""
+
+    def __init__(self, config: CameraConfig) -> None:
+        self._width = config.width
+        self._height = config.height
+        self._device_index = config.webcam_device
+        self._exposure = config.webcam_exposure
+        self._cap: cv2.VideoCapture | None = None
+
+    def start(self) -> None:
+        self._cap = cv2.VideoCapture(self._device_index)
+        if not self._cap.isOpened():
+            raise RuntimeError(
+                f"Could not open webcam device {self._device_index}. "
+                "Check that a camera is connected."
+            )
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+
+        if self._exposure is not None:
+            self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # manual mode
+            self._cap.set(cv2.CAP_PROP_EXPOSURE, self._exposure)
+            logger.info("Webcam exposure set to %s", self._exposure)
+        else:
+            logger.info("Webcam using auto exposure")
+
+    def stop(self) -> None:
+        if self._cap:
+            self._cap.release()
+            self._cap = None
+
+    def get_frame(self) -> np.ndarray:
+        if self._cap is None:
+            raise RuntimeError("WebcamCamera not started")
+        ret, frame = self._cap.read()
+        if not ret or frame is None:
+            return np.zeros((self._height, self._width, 3), dtype=np.uint8)
+        return frame
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
 def make_camera_source(config: CameraConfig) -> CameraSource:
-    """Instantiate the right CameraSource based on config."""
+    """Instantiate the right CameraSource based on config.
+
+    When source is "auto": try webcam first (works on Mac), then picamera2
+    (works on Pi), then fall back to mock.
+    """
     if config.source == "mock":
         return MockCamera(config)
+    if config.source == "webcam":
+        return WebcamCamera(config)
     if config.source == "picamera2":
         return PiCameraSource(config)
+    if config.source == "auto":
+        # Try webcam (Mac/USB cameras)
+        try:
+            cap = cv2.VideoCapture(config.webcam_device)
+            if cap.isOpened():
+                cap.release()
+                logger.info("Auto-detected webcam at device %d", config.webcam_device)
+                return WebcamCamera(config)
+            cap.release()
+        except Exception:
+            pass
+        # Try picamera2 (Pi)
+        try:
+            from picamera2 import Picamera2  # noqa: F401
+            logger.info("Auto-detected picamera2")
+            return PiCameraSource(config)
+        except ImportError:
+            pass
+        # Fall back to mock
+        logger.info("No camera detected, falling back to mock")
+        return MockCamera(config)
     raise ValueError(f"Unknown camera source: {config.source!r}")

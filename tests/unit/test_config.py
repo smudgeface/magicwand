@@ -81,7 +81,7 @@ class TestMissingFileReturnsDefaults:
         assert cfg.camera.width == 640
         assert cfg.camera.height == 480
         assert cfg.camera.fps == 30
-        assert cfg.camera.source == "mock"
+        assert cfg.camera.source == "auto"
         assert cfg.camera.mock.dot_speed == 2.0
 
 
@@ -105,7 +105,7 @@ port = 7777
         assert cfg.camera.width == 640
         assert cfg.camera.height == 480
         assert cfg.camera.fps == 30
-        assert cfg.camera.source == "mock"
+        assert cfg.camera.source == "auto"
         assert cfg.camera.mock.dot_speed == 2.0
 
 
