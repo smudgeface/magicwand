@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import queue
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
@@ -11,6 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from magicwand.actions import ActionDispatcher
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
 from magicwand.config import Config, clear_config_cache, get_config
 from magicwand.detection import Detector
@@ -21,6 +24,33 @@ from magicwand.web.routes import router as page_router
 from magicwand.web.stream import router as stream_router
 
 logger = logging.getLogger(__name__)
+
+
+async def _action_worker(
+    dispatcher: ActionDispatcher,
+    action_queue: queue.Queue,
+    stop_event: asyncio.Event,
+) -> None:
+    """Background task that consumes the action queue and dispatches HTTP requests."""
+    loop = asyncio.get_event_loop()
+    while not stop_event.is_set():
+        try:
+            action_dict = await loop.run_in_executor(None, action_queue.get, True, 0.5)
+            from magicwand.actions import ActionConfig
+            config = ActionConfig(**action_dict)
+            result = await dispatcher.fire(config)
+            logger.info(
+                "Action fired: %s → %s (%.0fms)",
+                config.url,
+                result.status_code or "error",
+                result.latency_ms,
+            )
+        except queue.Empty:
+            continue
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.exception("Action worker error")
 
 _STATIC_DIR = Path(__file__).parent / "web" / "static"
 
@@ -53,6 +83,8 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     recorder = Recorder(config.camera.width, config.camera.height)
     watcher = GestureWatcher(gesture_store, config.matching)
     gesture_store.on_change = watcher.invalidate_cache
+    action_queue: queue.Queue = queue.Queue()
+    action_dispatcher = ActionDispatcher()
     camera_thread = CameraThread(
         camera_source,
         frame_buffer,
@@ -62,6 +94,8 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         watcher=watcher,
         frame_width=config.camera.width,
         frame_height=config.camera.height,
+        gesture_store=gesture_store,
+        action_queue=action_queue,
     )
 
     @asynccontextmanager
@@ -73,6 +107,12 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         app.state.gesture_store = gesture_store
         app.state.recorder = recorder
         app.state.watcher = watcher
+        app.state.action_dispatcher = action_dispatcher
+        await action_dispatcher.start()
+        stop_event = asyncio.Event()
+        worker_task = asyncio.create_task(
+            _action_worker(action_dispatcher, action_queue, stop_event)
+        )
         camera_thread.start()
         logger.info(
             "magicwand started — camera source=%s, server=%s:%d",
@@ -82,6 +122,13 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         )
         yield
         # Shutdown
+        stop_event.set()
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
+        await action_dispatcher.stop()
         camera_thread.stop()
         camera_thread.join(timeout=5.0)
         logger.info("magicwand stopped")

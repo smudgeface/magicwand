@@ -110,6 +110,17 @@ class GestureStore:
             self.on_change(name)
         return len(gesture.samples)
 
+    def set_action(self, name: str, action: dict | None) -> bool:
+        """Set or clear the action for a gesture. Returns False if not found."""
+        gesture = self.get(name)
+        if gesture is None:
+            return False
+        gesture.action = action
+        self._save(gesture)
+        if self.on_change:
+            self.on_change(name)
+        return True
+
     def remove_sample(self, name: str, index: int) -> bool:
         """Remove a sample by index. Returns False if index out of range."""
         gesture = self._gestures.get(name)
