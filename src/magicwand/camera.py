@@ -180,6 +180,19 @@ class CameraThread(threading.Thread):
         self._action_queue = action_queue
         self._event_bus = event_bus
         self._stop_event = threading.Event()
+        self._paused = False
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
+    def pause(self) -> None:
+        """Pause frame capture (thread stays alive)."""
+        self._paused = True
+
+    def resume(self) -> None:
+        """Resume frame capture."""
+        self._paused = False
 
     def stop(self) -> None:
         """Signal the thread to stop and wait for it to finish."""
@@ -195,6 +208,10 @@ class CameraThread(threading.Thread):
 
         try:
             while not self._stop_event.is_set():
+                if self._paused:
+                    time.sleep(0.1)
+                    continue
+
                 t0 = time.monotonic()
 
                 raw = self._source.get_frame()
