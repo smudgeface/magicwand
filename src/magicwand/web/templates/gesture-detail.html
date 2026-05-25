@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set active_page = "gestures" %}
+
+{% block title %}Gesture Detail — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <div class="page-header">
+    <h2 id="gesture-name-header">Loading...</h2>
+    <div>
+      <a id="btn-add-samples" href="#" class="btn btn-secondary">Add Samples</a>
+      <button id="btn-delete" class="btn btn-danger">Delete</button>
+    </div>
+  </div>
+
+  <!-- Samples section -->
+  <section class="card">
+    <h3>Samples (<span id="sample-count">0</span>)</h3>
+    <div id="sample-list" class="sample-grid">
+      <!-- SVG sample cards with remove buttons -->
+    </div>
+  </section>
+
+  <!-- Action section -->
+  <section class="card">
+    <h3>Action</h3>
+    <div class="form-group">
+      <label>Preset</label>
+      <select id="preset-select" class="input">
+        <option value="">Custom...</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>URL</label>
+      <input type="text" id="action-url" class="input" placeholder="http://homebridge.local:8581/...">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Method</label>
+        <select id="action-method" class="input">
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Timeout (s)</label>
+        <input type="number" id="action-timeout" class="input" value="5" min="1" max="30" step="0.5">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Body (JSON)</label>
+      <textarea id="action-body" class="input textarea" placeholder='{"key": "value"}'></textarea>
+    </div>
+    <div class="action-buttons">
+      <button id="btn-save-action" class="btn btn-primary">Save Action</button>
+      <button id="btn-test-action" class="btn btn-secondary">Test</button>
+      <button id="btn-clear-action" class="btn btn-danger">Clear</button>
+    </div>
+    <div id="action-result" class="action-result" style="display:none"></div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gestures.js"></script>
+<script src="/static/js/gesture-detail.js"></script>
+<script>
+  const gestureName = "{{ name }}";
+</script>
+{% endblock %}

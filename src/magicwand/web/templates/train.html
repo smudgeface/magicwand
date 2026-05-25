@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set active_page = "gestures" %}
+
+{% block title %}Train — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <!-- Step 1: Name (shown if no name in URL) -->
+  <div id="step-name" class="train-step">
+    <h2>Name your gesture</h2>
+    <div class="form-group">
+      <input type="text" id="gesture-name" class="input" placeholder="e.g. lumos"
+             pattern="[a-z][a-z0-9-]{0,29}" maxlength="30">
+      <p class="input-hint">Lowercase letters, numbers, and hyphens. Must start with a letter.</p>
+      <p id="name-error" class="input-error" style="display:none"></p>
+    </div>
+    <button id="btn-next" class="btn btn-primary" disabled>Next</button>
+  </div>
+
+  <!-- Step 2: Record samples -->
+  <div id="step-record" class="train-step" style="display:none">
+    <div class="train-header">
+      <h2 id="gesture-title">Training: <span id="display-name"></span></h2>
+      <span id="sample-counter" class="badge">Sample 0 / 5</span>
+    </div>
+    <div class="train-layout">
+      <div class="feed-card recording-card" id="recording-card">
+        <img src="/api/stream" alt="Camera feed" id="train-feed">
+        <div id="recording-indicator" class="recording-indicator" style="display:none">
+          <span class="rec-dot"></span> Recording — <span id="point-count">0</span> points
+        </div>
+      </div>
+      <div id="samples-panel" class="samples-panel">
+        <h3>Recorded samples</h3>
+        <div id="sample-previews" class="sample-previews">
+          <!-- SVG previews appear here -->
+        </div>
+      </div>
+    </div>
+    <div class="train-controls">
+      <button id="btn-record" class="btn btn-primary">Record</button>
+      <button id="btn-stop" class="btn btn-danger" style="display:none">Stop</button>
+      <button id="btn-save" class="btn btn-primary" style="display:none">Save Gesture</button>
+      <button id="btn-save-test" class="btn btn-secondary" style="display:none">Save &amp; Test</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Test mode -->
+  <div id="step-test" class="train-step" style="display:none">
+    <h2>Test: <span id="test-name"></span></h2>
+    <div class="feed-card">
+      <img src="/api/stream" alt="Camera feed">
+    </div>
+    <div id="test-result" class="test-result" style="display:none">
+      <span id="test-match-name"></span>
+      <span id="test-confidence"></span>
+    </div>
+    <p class="hint">Perform your gesture in front of the camera...</p>
+    <a href="/gestures" class="btn btn-secondary">Done</a>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gestures.js"></script>
+<script src="/static/js/train.js"></script>
+{% endblock %}

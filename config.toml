@@ -31,6 +31,11 @@ cooldown_time = 2.0
 min_gesture_points = 10
 resample_count = 32
 
+[logging]
+directory = "logs"
+max_file_size = 10000000
+max_files = 5
+
 [homebridge]
 host = "homebridge.local"
 port = 8581

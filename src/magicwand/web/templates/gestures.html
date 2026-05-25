@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% set active_page = "gestures" %}
+
+{% block title %}Gestures — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <div class="page-header">
+    <h2>Gestures</h2>
+    <a href="/train" class="btn btn-primary">New Gesture</a>
+  </div>
+  <div id="gesture-list" class="gesture-grid">
+    <!-- Populated by JS -->
+  </div>
+  <div id="empty-state" class="empty-state" style="display:none">
+    <p>No gestures trained yet. Create one to get started.</p>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gestures.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', loadGestureList);
+</script>
+{% endblock %}
