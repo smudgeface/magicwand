@@ -11,6 +11,10 @@ ExecStart=/home/admin/magicwand/.venv/bin/python -m magicwand.main
 Restart=on-failure
 RestartSec=5
 Environment=MAGICWAND_CONFIG=/home/admin/magicwand/config.toml
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+MemoryMax=400M
 
 [Install]
 WantedBy=multi-user.target
