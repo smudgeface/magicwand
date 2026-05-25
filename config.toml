@@ -1,12 +1,12 @@
 [server]
-host = "127.0.0.1"
+host = "0.0.0.0"
 port = 8000
 
 [camera]
 width = 640
 height = 480
 fps = 30
-source = "mock"
+source = "auto"
 webcam_device = 0
 
 [camera.mock]
@@ -29,7 +29,7 @@ gap_timeout = 0.5
 cooldown_time = 2.0
 min_gesture_points = 10
 resample_count = 32
-dwell_speed_threshold = 0.05
+dwell_speed_threshold = 160
 dwell_min_points = 3
 linearity_threshold = 0.85
 min_curvature = 1.57

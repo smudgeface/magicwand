@@ -53,7 +53,7 @@ class MatchingConfig:
     cooldown_time: float = 2.0
     min_gesture_points: int = 10
     resample_count: int = 32
-    dwell_speed_threshold: float = 0.05
+    dwell_speed_threshold: float = 50.0
     dwell_min_points: int = 3
     linearity_threshold: float = 0.85
     min_curvature: float = 1.57
@@ -196,6 +196,7 @@ def _load_config(path: Path | None) -> Config:
 
 
 _cached_config: Config | None = None
+_config_path: Path | None = None
 
 
 def get_config(config_path: Path | str | None = None) -> Config:
@@ -205,10 +206,11 @@ def get_config(config_path: Path | str | None = None) -> Config:
         config_path: Optional path to override the default config file location.
                      Useful for testing. Clears the cache and reloads when provided.
     """
-    global _cached_config
+    global _cached_config, _config_path
 
     if config_path is not None:
-        _cached_config = _load_config(Path(config_path))
+        _config_path = Path(config_path)
+        _cached_config = _load_config(_config_path)
         return _cached_config
 
     if _cached_config is None:
@@ -217,6 +219,7 @@ def get_config(config_path: Path | str | None = None) -> Config:
             path = Path(env_path)
         else:
             path = Path.cwd() / "config.toml"
+        _config_path = path
         _cached_config = _load_config(path)
 
     return _cached_config
@@ -224,17 +227,16 @@ def get_config(config_path: Path | str | None = None) -> Config:
 
 def clear_config_cache() -> None:
     """Clear the cached config. Useful for testing."""
-    global _cached_config
+    global _cached_config, _config_path
     _cached_config = None
+    _config_path = None
 
 
 def save_config() -> None:
-    """Write the current cached config back to the config file."""
-    if _cached_config is None:
+    """Write the current cached config back to the file it was loaded from."""
+    if _cached_config is None or _config_path is None:
         return
-    env_path = os.environ.get("MAGICWAND_CONFIG")
-    path = Path(env_path) if env_path else Path.cwd() / "config.toml"
-    _write_config(_cached_config, path)
+    _write_config(_cached_config, _config_path)
 
 
 def _write_config(config: Config, path: Path) -> None:

@@ -154,15 +154,18 @@ class Segment:
     avg_speed: float
 
 
-def compute_speeds(points: list[GesturePoint]) -> list[float]:
-    """Compute speed between consecutive points (normalized units/sec).
+def compute_speeds(points: list[GesturePoint], frame_width: int = 640) -> list[float]:
+    """Compute speed between consecutive points in pixels/sec.
+
+    Points have x, y in [0, 1] normalized coordinates. Multiplying by
+    frame_width converts to pixel distance so the threshold is intuitive.
 
     Returns a list of len(points)-1 speeds.
     """
     speeds = []
     for i in range(len(points) - 1):
-        dx = points[i + 1].x - points[i].x
-        dy = points[i + 1].y - points[i].y
+        dx = (points[i + 1].x - points[i].x) * frame_width
+        dy = (points[i + 1].y - points[i].y) * frame_width
         dt = points[i + 1].t - points[i].t
         dist = math.sqrt(dx * dx + dy * dy)
         speed = dist / dt if dt > 0 else 0.0
@@ -174,16 +177,17 @@ def segment_at_dwells(
     points: list[GesturePoint],
     speed_threshold: float,
     min_dwell_points: int,
+    frame_width: int = 640,
 ) -> list[Segment]:
     """Split a point sequence into segments separated by dwells.
 
     Each point is labeled "dwelling" if speed to the next point < threshold.
-    Consecutive same-label points are grouped into segments.
+    speed_threshold is in pixels/sec. Consecutive same-label points are grouped.
     """
     if len(points) < 2:
         return [Segment(points=points, is_dwell=False, avg_speed=0.0)]
 
-    speeds = compute_speeds(points)
+    speeds = compute_speeds(points, frame_width)
     # Label each point (using speed of outgoing edge; last point inherits from prev)
     labels = [s < speed_threshold for s in speeds]
     labels.append(labels[-1] if labels else False)  # last point same as previous
@@ -300,17 +304,21 @@ def total_curvature(points: list[GesturePoint]) -> float:
 
 def extract_gesture_candidates(
     points: list[GesturePoint],
-    speed_threshold: float = 0.05,
+    speed_threshold: float = 50.0,
     min_dwell_points: int = 3,
     min_points: int = 10,
     min_duration: float = 0.2,
     linearity_threshold: float = 0.85,
     min_curvature: float = 1.57,
+    frame_width: int = 640,
 ) -> list[list[GesturePoint]]:
-    """Full segmentation pipeline: segment at dwells -> filter trivial -> return candidates."""
+    """Full segmentation pipeline: segment at dwells -> filter trivial -> return candidates.
+
+    speed_threshold is in pixels/sec.
+    """
 
     # 1. Segment at dwells
-    segments = segment_at_dwells(points, speed_threshold, min_dwell_points)
+    segments = segment_at_dwells(points, speed_threshold, min_dwell_points, frame_width)
 
     # 2. Collect non-dwell (motion) segments
     motion_segments = [s for s in segments if not s.is_dwell]
@@ -428,6 +436,7 @@ class GestureWatcher:
         self._cooldown_until: float = 0.0
         self._last_match: MatchResult | None = None
         self._preprocessed_cache: dict[str, list[list[tuple[float, float]]]] = {}
+        self._frame_width: int = 640
 
     # -- Public API ----------------------------------------------------------
 
@@ -443,6 +452,8 @@ class GestureWatcher:
         Returns a MatchResult only when a gesture has been completed and a
         match attempt has been made (whether successful or not).
         """
+        self._frame_width = frame_width
+
         if self._state == WatcherState.COOLDOWN:
             if timestamp >= self._cooldown_until:
                 self._state = WatcherState.IDLE
@@ -495,6 +506,7 @@ class GestureWatcher:
             min_duration=self._config.min_segment_duration,
             linearity_threshold=self._config.linearity_threshold,
             min_curvature=self._config.min_curvature,
+            frame_width=self._frame_width,
         )
 
         trimmed_count = len(self._points) - sum(len(c) for c in candidates)

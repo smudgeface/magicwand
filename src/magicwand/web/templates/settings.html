@@ -76,8 +76,8 @@
     <h4 style="color:#8888aa; margin: 1.5rem 0 0.75rem; font-weight: 400;">Segmentation</h4>
     <div class="form-row">
       <div class="form-group">
-        <label>Dwell Speed <button class="tip-btn" data-tip="Speed threshold (normalized units/sec) below which the wand is considered 'paused.' Used to find the start/end of intentional gestures. Lower = more sensitive to tiny movements during pauses.">?</button></label>
-        <input type="number" id="match-dwell-speed" class="input" value="0.05" min="0.01" max="0.5" step="0.01">
+        <label>Dwell Speed (px/s) <button class="tip-btn" data-tip="Pixels per second. Movement below this speed is a 'pause.' At 30 FPS: 50 px/s = ~1.7 px/frame (hand tremor). 150 px/s = ~5 px/frame (slow drift). Lower = only very still counts as paused. Higher = slow movements also treated as pauses.">?</button></label>
+        <input type="number" id="match-dwell-speed" class="input" value="50" min="10" max="500" step="10">
       </div>
       <div class="form-group">
         <label>Dwell Min Points <button class="tip-btn" data-tip="Minimum consecutive slow frames to count as a 'dwell' (pause). Lower = detects shorter pauses. Higher = requires a longer hold to split segments.">?</button></label>

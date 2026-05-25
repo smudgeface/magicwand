@@ -55,7 +55,7 @@ class TestSegmentAtDwells:
     def test_dwell_motion_dwell(self):
         """Classic pattern: dwell → motion → dwell produces 3 segments."""
         pts = _make_dwell(5) + _make_line_motion(20, start_t=5 * 0.033) + _make_dwell(5, start_t=(5 + 20) * 0.033)
-        segments = segment_at_dwells(pts, speed_threshold=0.05, min_dwell_points=3)
+        segments = segment_at_dwells(pts, speed_threshold=50.0, min_dwell_points=3)
         dwell_segs = [s for s in segments if s.is_dwell]
         motion_segs = [s for s in segments if not s.is_dwell]
         assert len(dwell_segs) >= 2
@@ -64,7 +64,7 @@ class TestSegmentAtDwells:
     def test_all_moving(self):
         """All moving points = one non-dwell segment."""
         pts = _make_line_motion(30)
-        segments = segment_at_dwells(pts, speed_threshold=0.05, min_dwell_points=3)
+        segments = segment_at_dwells(pts, speed_threshold=50.0, min_dwell_points=3)
         non_dwell = [s for s in segments if not s.is_dwell]
         assert len(non_dwell) == 1
 
@@ -102,7 +102,7 @@ class TestExtractGestureCandidates:
         all_pts = entry + dwell1 + gesture + dwell2 + exit_trail
         candidates = extract_gesture_candidates(
             all_pts,
-            speed_threshold=0.05,
+            speed_threshold=50.0,
             min_dwell_points=3,
             min_points=10,
             min_duration=0.2,

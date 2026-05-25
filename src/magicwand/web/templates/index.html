@@ -6,9 +6,9 @@
   <div class="feed-card">
     <img src="/api/stream" alt="Camera feed">
     <div class="status-bar">
-      <span class="status-item">Camera: mock</span>
+      <span class="status-item" id="camera-source">Camera: —</span>
       <span class="status-sep">•</span>
-      <span class="status-item">Stream: active</span>
+      <span class="status-item" id="stream-fps">FPS: —</span>
     </div>
   </div>
   <section class="card event-log-section">
@@ -25,4 +25,11 @@
 
 {% block scripts %}
 <script src="/static/js/events.js"></script>
+<script>
+(async function() {
+  const info = await fetch('/api/system/info').then(r => r.json());
+  document.getElementById('camera-source').textContent = 'Camera: ' + info.camera_source;
+  document.getElementById('stream-fps').textContent = 'FPS: ' + info.detection_fps;
+})();
+</script>
 {% endblock %}
