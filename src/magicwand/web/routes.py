@@ -294,11 +294,25 @@ async def stop_recording(request: Request) -> dict:
 
 @router.get("/api/matching/status")
 async def matching_status(request: Request) -> dict:
-    """Return the current gesture watcher state and most recent match result."""
+    """Return the current gesture watcher state, config, and most recent match result."""
     watcher = request.app.state.watcher
     last = watcher.last_match
+    cfg = watcher._config
     return {
         "state": watcher.state.value,
+        "config": {
+            "distance_threshold": cfg.distance_threshold,
+            "min_confidence": cfg.min_confidence,
+            "gap_timeout": cfg.gap_timeout,
+            "cooldown_time": cfg.cooldown_time,
+            "min_gesture_points": cfg.min_gesture_points,
+            "resample_count": cfg.resample_count,
+            "dwell_speed_threshold": cfg.dwell_speed_threshold,
+            "dwell_min_points": cfg.dwell_min_points,
+            "linearity_threshold": cfg.linearity_threshold,
+            "min_curvature": cfg.min_curvature,
+            "min_segment_duration": cfg.min_segment_duration,
+        },
         "last_match": {
             "matched": last.matched,
             "gesture_name": last.gesture_name,

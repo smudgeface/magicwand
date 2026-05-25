@@ -19,6 +19,21 @@
       document.getElementById('det-blur').value = cfg.blur_kernel;
       document.getElementById('det-trail').value = cfg.trail_length;
     } catch (e) {}
+
+    try {
+      const match = await fetch('/api/matching/status').then(r => r.json());
+      const mc = match.config;
+      document.getElementById('match-dist').value = mc.distance_threshold;
+      document.getElementById('match-conf').value = mc.min_confidence;
+      document.getElementById('match-gap').value = mc.gap_timeout;
+      document.getElementById('match-cooldown').value = mc.cooldown_time;
+      document.getElementById('match-min-pts').value = mc.min_gesture_points;
+      document.getElementById('match-dwell-speed').value = mc.dwell_speed_threshold;
+      document.getElementById('match-dwell-pts').value = mc.dwell_min_points;
+      document.getElementById('match-linearity').value = mc.linearity_threshold;
+      document.getElementById('match-curvature').value = mc.min_curvature;
+      document.getElementById('match-min-dur').value = mc.min_segment_duration;
+    } catch (e) {}
   }
 
   async function loadSystemInfo() {
