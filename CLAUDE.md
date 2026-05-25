@@ -42,6 +42,12 @@ in a GPU.
 - Configuration in a single file (yaml or toml) at the repo root, not
   scattered env vars.
 
+## Documentation
+
+- `docs/implementation-plan.md` — phased build plan. Read this before starting
+  work on any phase. Each phase has explicit deliverables, technical notes,
+  and test requirements.
+
 ## Out of scope (for now)
 
 - Multi-user / auth on the web app — it runs on the home LAN.

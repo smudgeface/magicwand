@@ -1,0 +1,14 @@
+[server]
+host = "0.0.0.0"
+port = 8000
+
+[camera]
+width = 640
+height = 480
+fps = 30
+# "picamera2" for real hardware, "mock" for development
+source = "mock"
+
+[camera.mock]
+# Speed multiplier for the figure-8 animation (higher = faster dot)
+dot_speed = 2.0
