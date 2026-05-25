@@ -326,12 +326,14 @@ def make_camera_source(config: CameraConfig) -> CameraSource:
             cap.release()
         except Exception:
             pass
-        # Try picamera2 (Pi)
+        # Try picamera2 (Pi) — probe for an actual connected camera
         try:
-            from picamera2 import Picamera2  # noqa: F401
-            logger.info("Auto-detected picamera2")
+            from picamera2 import Picamera2
+            cam = Picamera2()
+            cam.close()
+            logger.info("Auto-detected picamera2 with connected camera")
             return PiCameraSource(config)
-        except ImportError:
+        except Exception:
             pass
         # Fall back to mock
         logger.info("No camera detected, falling back to mock")
