@@ -65,11 +65,11 @@
       document.getElementById('detail-match').textContent = mr.matched ? mr.gesture_name : 'no match';
       document.getElementById('detail-confidence').textContent = mr.matched ? `${(mr.confidence * 100).toFixed(1)}%` : '—';
 
-      // Render SVG
+      // Render color-coded SVG
       const svgContainer = document.getElementById('detail-svg');
       svgContainer.innerHTML = '';
       if (capture.raw_points && capture.raw_points.length > 1) {
-        const svg = renderGestureSVG(capture.raw_points, { width: 200, height: 200, color: '#c4b5fd' });
+        const svg = renderSegmentedSVG(capture.raw_points, capture.segment_labels, { width: 200, height: 200 });
         if (svg instanceof Element) svgContainer.appendChild(svg);
       }
 

@@ -43,9 +43,17 @@ async def test_delete_gesture(client: httpx.AsyncClient) -> None:
 
 async def test_add_sample_via_api(client: httpx.AsyncClient) -> None:
     """POST /api/gestures/{name}/samples stores a sample; GET detail shows sample_count=1."""
+    import math
     await client.post("/api/gestures", json={"name": "incendio"})
 
-    points = [{"x": i * 0.1, "y": i * 0.1, "t": float(i)} for i in range(5)]
+    # Create a circular gesture with enough points and curvature to pass segmentation
+    n = 40
+    points = [
+        {"x": 0.5 + 0.2 * math.cos(2 * math.pi * i / n),
+         "y": 0.5 + 0.2 * math.sin(2 * math.pi * i / n),
+         "t": i * 0.033}
+        for i in range(n)
+    ]
     sample_response = await client.post("/api/gestures/incendio/samples", json=points)
     assert sample_response.status_code == 201
     assert sample_response.json()["sample_count"] == 1

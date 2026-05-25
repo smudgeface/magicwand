@@ -23,15 +23,15 @@ trail_length = 50
 directory = "gestures"
 
 [matching]
-distance_threshold = 2
-min_confidence = 0.6
+distance_threshold = 0.4
+min_confidence = 0.7
 gap_timeout = 0.5
 cooldown_time = 2
 min_gesture_points = 10
 resample_count = 32
 dwell_speed_threshold = 100
 dwell_min_points = 10
-linearity_threshold = 0.75
+linearity_threshold = 0.95
 min_curvature = 1.57
 min_segment_duration = 0.5
 

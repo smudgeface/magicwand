@@ -101,13 +101,24 @@
     }
 
     if (result.sample && result.point_count >= 5) {
-      samples.push(result.sample);
-      // Submit to API
-      await fetchJSON(`/api/gestures/${gestureName}/samples`, {
-        method: 'POST',
-        body: JSON.stringify(result.sample),
-      });
+      try {
+        await fetchJSON(`/api/gestures/${gestureName}/samples`, {
+          method: 'POST',
+          body: JSON.stringify(result.sample),
+        });
+        // Fetch back the stored sample (segmented) for colored preview
+        const detail = await fetchJSON(`/api/gestures/${gestureName}`);
+        const stored = detail.samples[detail.samples.length - 1];
+        samples.push(stored);
+      } catch (e) {
+        // Segmentation rejected the sample — show error briefly
+        const counter = document.getElementById('sample-counter');
+        counter.textContent = `Sample rejected: ${e.message}`;
+        setTimeout(() => updateSampleUI(), 3000);
+      }
     }
+    // Return recorder to IDLE so the watcher resumes processing
+    await fetchJSON('/api/recording/discard', { method: 'POST' });
     updateSampleUI();
   }
 
@@ -120,7 +131,14 @@
     samples.forEach((sample, i) => {
       const div = document.createElement('div');
       div.className = 'sample-preview-card';
-      const svg = renderGestureSVG(sample, { width: 80, height: 80, color: '#7c3aed' });
+      const pts = sample.points || sample;
+      const labels = sample.segment_labels || null;
+      let svg;
+      if (labels) {
+        svg = renderSegmentedSVG(pts, labels, { width: 80, height: 80 });
+      } else {
+        svg = renderGestureSVG(pts, { width: 80, height: 80, color: '#7c3aed' });
+      }
       if (svg instanceof Element) div.appendChild(svg);
       else div.innerHTML = `<span>Sample ${i + 1}</span>`;
       previews.appendChild(div);
@@ -152,22 +170,41 @@
     document.getElementById('step-test').style.display = '';
     document.getElementById('test-name').textContent = gestureName;
 
-    // Poll matching status
+    let lastSeenId = 0;
+    // Get the current latest capture ID so we only react to new ones
+    fetchJSON('/api/captures?limit=1').then(data => {
+      if (data.captures && data.captures.length > 0) {
+        lastSeenId = data.captures[0].id;
+      }
+    }).catch(() => {});
+
     const pollTest = setInterval(async () => {
       try {
-        const status = await fetchJSON('/api/matching/status');
-        if (status.last_match && status.last_match.matched) {
-          const result = document.getElementById('test-result');
-          result.style.display = '';
-          document.getElementById('test-match-name').textContent = status.last_match.gesture_name;
+        const data = await fetchJSON('/api/captures?limit=1');
+        if (!data.captures || data.captures.length === 0) return;
+        const latest = data.captures[0];
+        if (latest.id <= lastSeenId) return;
+        lastSeenId = latest.id;
+
+        const resultDiv = document.getElementById('test-result');
+        resultDiv.style.display = '';
+        const mr = latest.match_result;
+        if (mr.matched) {
+          document.getElementById('test-match-name').textContent = mr.gesture_name;
           document.getElementById('test-confidence').textContent =
-            `${(status.last_match.confidence * 100).toFixed(0)}% confidence`;
-          result.className = 'test-result success';
+            `${(mr.confidence * 100).toFixed(0)}% confidence`;
+          resultDiv.className = 'test-result success';
+        } else {
+          document.getElementById('test-match-name').textContent = 'No match';
+          const reason = mr.distance != null
+            ? `dist=${mr.distance.toFixed(3)}, conf=${(mr.confidence * 100).toFixed(0)}%`
+            : 'no gesture segment found';
+          document.getElementById('test-confidence').textContent = reason;
+          resultDiv.className = 'test-result error';
         }
       } catch (e) { /* ignore */ }
     }, 500);
 
-    // Clean up on page leave
     window.addEventListener('beforeunload', () => clearInterval(pollTest));
   }
 })();

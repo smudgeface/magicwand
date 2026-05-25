@@ -52,8 +52,15 @@ async def test_training_workflow_api(client):
     resp = await client.post("/api/recording/stop")
     assert resp.status_code == 200
 
-    # Manually add a sample
-    sample = [{"x": 0.1 + i * 0.1, "y": 0.2 + i * 0.1, "t": i * 0.1} for i in range(10)]
+    # Manually add a sample (circular gesture that passes segmentation)
+    import math
+    n = 40
+    sample = [
+        {"x": 0.5 + 0.2 * math.cos(2 * math.pi * i / n),
+         "y": 0.5 + 0.2 * math.sin(2 * math.pi * i / n),
+         "t": i * 0.033}
+        for i in range(n)
+    ]
     resp = await client.post("/api/gestures/train-test/samples", json=sample)
     assert resp.status_code == 201
     assert resp.json()["sample_count"] == 1
