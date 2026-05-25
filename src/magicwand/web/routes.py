@@ -23,10 +23,93 @@ async def index(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html")
 
 
+@router.get("/gestures", response_class=HTMLResponse)
+async def gestures_page(request: Request) -> HTMLResponse:
+    """Render the gesture list page."""
+    return templates.TemplateResponse(request, "gestures.html")
+
+
+@router.get("/train", response_class=HTMLResponse)
+async def train_page(request: Request) -> HTMLResponse:
+    """Render the gesture training wizard page."""
+    return templates.TemplateResponse(request, "train.html")
+
+
+@router.get("/gesture/{name}", response_class=HTMLResponse)
+async def gesture_detail_page(request: Request, name: str) -> HTMLResponse:
+    """Render the gesture detail/edit page."""
+    return templates.TemplateResponse(request, "gesture-detail.html", {"name": name})
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request) -> HTMLResponse:
+    """Render the settings page."""
+    return templates.TemplateResponse(request, "settings.html")
+
+
 @router.get("/api/health")
 async def health() -> dict:
     """Return service status and uptime in seconds."""
     return {"status": "ok", "uptime": round(time.monotonic() - _start_time, 1)}
+
+
+@router.get("/api/system/info")
+async def system_info(request: Request) -> dict:
+    """Return system stats: uptime, CPU temp, RAM, disk, camera, FPS, versions."""
+    import platform
+    import magicwand
+
+    # Uptime
+    uptime = round(time.monotonic() - _start_time, 1)
+
+    # CPU temp (Pi-specific, returns null on Mac)
+    cpu_temp = None
+    try:
+        with open("/sys/class/thermal/thermal_zone0/temp") as f:
+            cpu_temp = round(int(f.read().strip()) / 1000, 1)
+    except (FileNotFoundError, ValueError):
+        pass
+
+    # RAM (cross-platform via /proc/meminfo or rough estimate)
+    ram_used = None
+    ram_total = None
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = {}
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    meminfo[parts[0].rstrip(":")] = int(parts[1])
+            ram_total = round(meminfo.get("MemTotal", 0) / 1024, 0)
+            available = meminfo.get("MemAvailable", 0)
+            ram_used = round((meminfo.get("MemTotal", 0) - available) / 1024, 0)
+    except (FileNotFoundError, ValueError):
+        pass
+
+    # Disk
+    import shutil
+    disk = shutil.disk_usage("/")
+
+    # Detection FPS
+    detector = getattr(request.app.state, "detector", None)
+    fps = round(detector.fps, 1) if detector else 0
+
+    # Camera source
+    from magicwand.config import get_config
+    cfg = get_config()
+
+    return {
+        "uptime_seconds": uptime,
+        "cpu_temp_c": cpu_temp,
+        "ram_used_mb": ram_used,
+        "ram_total_mb": ram_total,
+        "disk_used_gb": round(disk.used / (1024**3), 1),
+        "disk_total_gb": round(disk.total / (1024**3), 1),
+        "camera_source": cfg.camera.source,
+        "detection_fps": fps,
+        "python_version": platform.python_version(),
+        "app_version": magicwand.__version__,
+    }
 
 
 @router.put("/api/settings/detection")
@@ -265,6 +348,13 @@ async def test_action(request: Request, name: str) -> dict:
 # ---------------------------------------------------------------------------
 # Homebridge endpoints
 # ---------------------------------------------------------------------------
+
+@router.get("/api/logs")
+async def get_logs(request: Request, since: str = None, type: str = None, limit: int = 100) -> list[dict]:
+    """Return historical log entries, optionally filtered by timestamp and event type."""
+    event_bus = request.app.state.event_bus
+    return event_bus.read_logs(since=since, event_type=type, limit=limit)
+
 
 @router.get("/api/homebridge/presets")
 async def homebridge_presets(request: Request) -> list[dict]:

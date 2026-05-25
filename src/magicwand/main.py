@@ -17,11 +17,13 @@ from magicwand.actions import ActionDispatcher
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
 from magicwand.config import Config, clear_config_cache, get_config
 from magicwand.detection import Detector
+from magicwand.events import EventBus, EventType
 from magicwand.gestures import GestureStore
 from magicwand.matching import GestureWatcher
 from magicwand.recorder import Recorder
 from magicwand.web.routes import router as page_router
 from magicwand.web.stream import router as stream_router
+from magicwand.web.ws import router as ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ async def _action_worker(
     dispatcher: ActionDispatcher,
     action_queue: queue.Queue,
     stop_event: asyncio.Event,
+    event_bus: EventBus | None = None,
 ) -> None:
     """Background task that consumes the action queue and dispatches HTTP requests."""
     loop = asyncio.get_event_loop()
@@ -45,6 +48,22 @@ async def _action_worker(
                 result.status_code or "error",
                 result.latency_ms,
             )
+            if event_bus is not None:
+                gesture_name = action_dict.get("gesture_name", "")
+                if result.success:
+                    event_bus.emit(EventType.ACTION_FIRED, {
+                        "gesture_name": gesture_name,
+                        "url": config.url,
+                        "status_code": result.status_code,
+                        "latency_ms": round(result.latency_ms, 1),
+                    })
+                else:
+                    event_bus.emit(EventType.ACTION_FAILED, {
+                        "gesture_name": gesture_name,
+                        "url": config.url,
+                        "error": result.error or "unknown",
+                        "latency_ms": round(result.latency_ms, 1),
+                    })
         except queue.Empty:
             continue
         except asyncio.CancelledError:
@@ -71,8 +90,10 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     # Resolve gestures directory relative to config file location or CWD.
     if config_path is not None:
         gestures_dir = Path(config_path).parent / config.gestures.directory
+        log_dir = Path(config_path).parent / config.logging.directory
     else:
         gestures_dir = Path.cwd() / config.gestures.directory
+        log_dir = Path.cwd() / config.logging.directory
     gestures_dir.mkdir(parents=True, exist_ok=True)
 
     # Build camera objects early so lifespan can close over them.
@@ -85,6 +106,11 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     gesture_store.on_change = watcher.invalidate_cache
     action_queue: queue.Queue = queue.Queue()
     action_dispatcher = ActionDispatcher()
+    event_bus = EventBus(
+        log_dir=log_dir,
+        max_file_size=config.logging.max_file_size,
+        max_files=config.logging.max_files,
+    )
     camera_thread = CameraThread(
         camera_source,
         frame_buffer,
@@ -96,6 +122,7 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         frame_height=config.camera.height,
         gesture_store=gesture_store,
         action_queue=action_queue,
+        event_bus=event_bus,
     )
 
     @asynccontextmanager
@@ -108,10 +135,11 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         app.state.recorder = recorder
         app.state.watcher = watcher
         app.state.action_dispatcher = action_dispatcher
+        app.state.event_bus = event_bus
         await action_dispatcher.start()
         stop_event = asyncio.Event()
         worker_task = asyncio.create_task(
-            _action_worker(action_dispatcher, action_queue, stop_event)
+            _action_worker(action_dispatcher, action_queue, stop_event, event_bus)
         )
         camera_thread.start()
         logger.info(
@@ -120,6 +148,10 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
             config.server.host,
             config.server.port,
         )
+        event_bus.emit(EventType.SYSTEM_START, {
+            "camera_source": config.camera.source,
+            "server_port": config.server.port,
+        })
         yield
         # Shutdown
         stop_event.set()
@@ -131,6 +163,7 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         await action_dispatcher.stop()
         camera_thread.stop()
         camera_thread.join(timeout=5.0)
+        event_bus.close()
         logger.info("magicwand stopped")
 
     app = FastAPI(title="magicwand", version="0.1.0", lifespan=lifespan)
@@ -138,6 +171,7 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(page_router)
     app.include_router(stream_router)
+    app.include_router(ws_router)
 
     return app
 

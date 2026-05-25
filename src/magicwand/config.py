@@ -68,6 +68,13 @@ class HomebridgeConfig:
 
 
 @dataclass
+class LoggingConfig:
+    directory: str = "logs"
+    max_file_size: int = 10_000_000
+    max_files: int = 5
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
@@ -75,6 +82,7 @@ class Config:
     gestures: GesturesConfig = field(default_factory=GesturesConfig)
     matching: MatchingConfig = field(default_factory=MatchingConfig)
     homebridge: HomebridgeConfig = field(default_factory=HomebridgeConfig)
+    logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 
 def _load_config(path: Path | None) -> Config:
@@ -149,7 +157,14 @@ def _load_config(path: Path | None) -> Config:
         presets=homebridge_presets,
     )
 
-    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching, homebridge=homebridge)
+    logging_raw = raw.get("logging", {})
+    logging_config = LoggingConfig(
+        directory=logging_raw.get("directory", "logs"),
+        max_file_size=logging_raw.get("max_file_size", 10_000_000),
+        max_files=logging_raw.get("max_files", 5),
+    )
+
+    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching, homebridge=homebridge, logging=logging_config)
 
 
 _cached_config: Config | None = None

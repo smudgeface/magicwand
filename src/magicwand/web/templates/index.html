@@ -1,27 +1,28 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>magicwand</title>
-  <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>magicwand</h1>
-    </header>
+{% extends "base.html" %}
+{% set active_page = "feed" %}
 
-    <main>
-      <div class="feed-card">
-        <img src="/api/stream" alt="Camera feed">
-        <div class="status-bar">
-          <span class="status-item">Camera: mock</span>
-          <span class="status-sep">•</span>
-          <span class="status-item">Stream: active</span>
-        </div>
-      </div>
-    </main>
+{% block content %}
+<main>
+  <div class="feed-card">
+    <img src="/api/stream" alt="Camera feed">
+    <div class="status-bar">
+      <span class="status-item">Camera: mock</span>
+      <span class="status-sep">•</span>
+      <span class="status-item">Stream: active</span>
+    </div>
   </div>
-</body>
-</html>
+  <section class="card event-log-section">
+    <div class="event-log-header">
+      <h3>Event Log</h3>
+      <span id="ws-status" class="ws-status">connecting...</span>
+    </div>
+    <div id="event-log" class="event-log">
+      <!-- Events appear here via WebSocket -->
+    </div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/events.js"></script>
+{% endblock %}

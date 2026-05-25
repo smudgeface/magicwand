@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}magicwand{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="nav-bar">
+    <a href="/" class="nav-logo">magicwand</a>
+    <div class="nav-links">
+      <a href="/" class="nav-link {% if active_page == 'feed' %}active{% endif %}">Feed</a>
+      <a href="/gestures" class="nav-link {% if active_page == 'gestures' %}active{% endif %}">Gestures</a>
+      <a href="/settings" class="nav-link {% if active_page == 'settings' %}active{% endif %}">Settings</a>
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

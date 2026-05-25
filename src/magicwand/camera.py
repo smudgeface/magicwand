@@ -165,6 +165,7 @@ class CameraThread(threading.Thread):
         frame_height: int = 480,
         gesture_store=None,
         action_queue: queue.Queue | None = None,
+        event_bus=None,
     ) -> None:
         super().__init__(name="camera-thread", daemon=True)
         self._source = source
@@ -177,6 +178,7 @@ class CameraThread(threading.Thread):
         self._source_height = frame_height
         self._gesture_store = gesture_store
         self._action_queue = action_queue
+        self._event_bus = event_bus
         self._stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -211,6 +213,18 @@ class CameraThread(threading.Thread):
                                     gesture = self._gesture_store.get(match_result.gesture_name)
                                     if gesture and gesture.action:
                                         self._action_queue.put(gesture.action)
+                            if self._event_bus and match_result:
+                                from magicwand.events import EventType
+                                if match_result.matched:
+                                    self._event_bus.emit(EventType.GESTURE_RECOGNIZED, {
+                                        "gesture_name": match_result.gesture_name,
+                                        "confidence": round(match_result.confidence, 3),
+                                        "distance": round(match_result.distance, 4),
+                                    })
+                                else:
+                                    self._event_bus.emit(EventType.GESTURE_REJECTED, {
+                                        "reason": "no_match",
+                                    })
 
                 ok, buf = cv2.imencode(
                     ".jpg", raw, [cv2.IMWRITE_JPEG_QUALITY, self._JPEG_QUALITY]
