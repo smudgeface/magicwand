@@ -330,3 +330,27 @@ select.input { appearance: auto; }
   .detail-body { flex-direction: column; }
   .capture-detail-panel { max-height: 80vh; }
 }
+
+/* Tooltip buttons and overlay */
+.tip-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; border: 1px solid #7c3aed;
+  background: transparent; color: #7c3aed; font-size: 0.7rem; font-weight: 700;
+  cursor: pointer; margin-left: 0.3rem; vertical-align: middle;
+  line-height: 1; padding: 0;
+}
+.tip-btn:hover { background: #7c3aed; color: white; }
+
+.tip-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 1.5rem;
+}
+.tip-content {
+  background: #1a1a2e; border: 1px solid #7c3aed; border-radius: 12px;
+  padding: 1.25rem; max-width: 400px; width: 100%;
+}
+.tip-content p {
+  color: #e0e0e0; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1rem;
+}
+.tip-content .btn { width: 100%; text-align: center; }

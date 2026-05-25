@@ -1,17 +1,13 @@
 [server]
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 8000
 
 [camera]
 width = 640
 height = 480
 fps = 30
-# "auto" tries webcam then picamera2 then mock
-# "webcam" for USB/UVC camera, "picamera2" for Pi, "mock" for fake data
-source = "auto"
-# Webcam settings (used when source is "webcam" or "auto" detects one)
+source = "mock"
 webcam_device = 0
-# webcam_exposure = -6.0  # uncomment to set manual exposure (negative = darker)
 
 [camera.mock]
 dot_speed = 2.0
@@ -27,7 +23,7 @@ trail_length = 50
 directory = "gestures"
 
 [matching]
-distance_threshold = 2.0
+distance_threshold = 0.8
 min_confidence = 0.6
 gap_timeout = 0.5
 cooldown_time = 2.0
@@ -43,26 +39,11 @@ min_segment_duration = 0.2
 directory = "captures"
 max_captures = 200
 
-[logging]
-directory = "logs"
-max_file_size = 10000000
-max_files = 5
-
 [homebridge]
 host = "homebridge.local"
 port = 8581
 
-[[homebridge.presets]]
-name = "Switch On"
-method = "GET"
-url_template = "http://{host}:{port}/?accessoryId={accessory_id}&state=true"
-
-[[homebridge.presets]]
-name = "Switch Off"
-method = "GET"
-url_template = "http://{host}:{port}/?accessoryId={accessory_id}&state=false"
-
-[[homebridge.presets]]
-name = "Scene Trigger"
-method = "GET"
-url_template = "http://{host}:{port}/?accessoryId={accessory_id}"
+[logging]
+directory = "logs"
+max_file_size = 10000000
+max_files = 5

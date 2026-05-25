@@ -226,3 +226,77 @@ def clear_config_cache() -> None:
     """Clear the cached config. Useful for testing."""
     global _cached_config
     _cached_config = None
+
+
+def save_config() -> None:
+    """Write the current cached config back to the config file."""
+    if _cached_config is None:
+        return
+    env_path = os.environ.get("MAGICWAND_CONFIG")
+    path = Path(env_path) if env_path else Path.cwd() / "config.toml"
+    _write_config(_cached_config, path)
+
+
+def _write_config(config: Config, path: Path) -> None:
+    """Serialize config to TOML and write to disk."""
+    lines = []
+    lines.append("[server]")
+    lines.append(f'host = "{config.server.host}"')
+    lines.append(f"port = {config.server.port}")
+    lines.append("")
+    lines.append("[camera]")
+    lines.append(f"width = {config.camera.width}")
+    lines.append(f"height = {config.camera.height}")
+    lines.append(f"fps = {config.camera.fps}")
+    lines.append(f'source = "{config.camera.source}"')
+    lines.append(f"webcam_device = {config.camera.webcam_device}")
+    if config.camera.webcam_exposure is not None:
+        lines.append(f"webcam_exposure = {config.camera.webcam_exposure}")
+    lines.append("")
+    lines.append("[camera.mock]")
+    lines.append(f"dot_speed = {config.camera.mock.dot_speed}")
+    lines.append("")
+    lines.append("[detection]")
+    lines.append(f"threshold = {config.detection.threshold}")
+    lines.append(f"min_area = {config.detection.min_area}")
+    lines.append(f"max_area = {config.detection.max_area}")
+    lines.append(f"blur_kernel = {config.detection.blur_kernel}")
+    lines.append(f"trail_length = {config.detection.trail_length}")
+    lines.append("")
+    lines.append("[gestures]")
+    lines.append(f'directory = "{config.gestures.directory}"')
+    lines.append("")
+    lines.append("[matching]")
+    lines.append(f"distance_threshold = {config.matching.distance_threshold}")
+    lines.append(f"min_confidence = {config.matching.min_confidence}")
+    lines.append(f"gap_timeout = {config.matching.gap_timeout}")
+    lines.append(f"cooldown_time = {config.matching.cooldown_time}")
+    lines.append(f"min_gesture_points = {config.matching.min_gesture_points}")
+    lines.append(f"resample_count = {config.matching.resample_count}")
+    lines.append(f"dwell_speed_threshold = {config.matching.dwell_speed_threshold}")
+    lines.append(f"dwell_min_points = {config.matching.dwell_min_points}")
+    lines.append(f"linearity_threshold = {config.matching.linearity_threshold}")
+    lines.append(f"min_curvature = {config.matching.min_curvature}")
+    lines.append(f"min_segment_duration = {config.matching.min_segment_duration}")
+    lines.append("")
+    lines.append("[captures]")
+    lines.append(f'directory = "{config.captures.directory}"')
+    lines.append(f"max_captures = {config.captures.max_captures}")
+    lines.append("")
+    lines.append("[homebridge]")
+    lines.append(f'host = "{config.homebridge.host}"')
+    lines.append(f"port = {config.homebridge.port}")
+    for preset in config.homebridge.presets:
+        lines.append("")
+        lines.append("[[homebridge.presets]]")
+        lines.append(f'name = "{preset.name}"')
+        lines.append(f'method = "{preset.method}"')
+        lines.append(f'url_template = "{preset.url_template}"')
+    lines.append("")
+    lines.append("[logging]")
+    lines.append(f'directory = "{config.logging.directory}"')
+    lines.append(f"max_file_size = {config.logging.max_file_size}")
+    lines.append(f"max_files = {config.logging.max_files}")
+    lines.append("")
+
+    path.write_text("\n".join(lines))

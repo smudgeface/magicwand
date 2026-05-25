@@ -1,9 +1,9 @@
 import pytest
 
 
-async def test_settings_page_loads(client):
-    """Settings page serves correctly."""
-    resp = await client.get("/settings")
+async def test_admin_page_loads(client):
+    """Admin page serves correctly."""
+    resp = await client.get("/admin")
     assert resp.status_code == 200
     assert "Admin" in resp.text
     assert "Detection" in resp.text
@@ -36,10 +36,10 @@ async def test_system_info_app_version(client):
     assert data["app_version"] == "0.1.0"
 
 
-async def test_nav_has_settings_link(client):
-    """All pages should have settings link in nav."""
+async def test_nav_has_admin_link(client):
+    """All pages should have admin link in nav."""
     resp = await client.get("/")
-    assert "/settings" in resp.text
+    assert "/admin" in resp.text
 
 
 async def test_settings_js_serves(client):
