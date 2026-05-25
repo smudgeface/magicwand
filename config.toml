@@ -19,3 +19,6 @@ min_area = 20
 max_area = 5000
 blur_kernel = 5
 trail_length = 50
+
+[gestures]
+directory = "gestures"
