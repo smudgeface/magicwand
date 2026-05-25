@@ -60,7 +60,9 @@ class MockCamera:
         dot_x = int(cx + rx * math.sin(angle))
         dot_y = int(cy + ry * math.sin(2 * angle) / 2)
 
-        frame = np.zeros((self._height, self._width, 3), dtype=np.uint8)
+        # Low-level random noise (0-15) to simulate a real IR camera's noise floor
+        noise = np.random.randint(0, 16, (self._height, self._width, 3), dtype=np.uint8)
+        frame = noise.copy()
         cv2.circle(frame, (dot_x, dot_y), 10, (255, 255, 255), -1)
         return frame
 
@@ -150,11 +152,12 @@ class CameraThread(threading.Thread):
     _JPEG_QUALITY = 80
     _LOG_FPS_INTERVAL = 5.0  # seconds between FPS log messages
 
-    def __init__(self, source: CameraSource, buffer: FrameBuffer, fps: int) -> None:
+    def __init__(self, source: CameraSource, buffer: FrameBuffer, fps: int, detector=None) -> None:
         super().__init__(name="camera-thread", daemon=True)
         self._source = source
         self._buffer = buffer
         self._fps = fps
+        self._detector = detector
         self._stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -174,6 +177,10 @@ class CameraThread(threading.Thread):
                 t0 = time.monotonic()
 
                 raw = self._source.get_frame()
+
+                if self._detector is not None:
+                    raw, result = self._detector.process(raw)
+
                 ok, buf = cv2.imencode(
                     ".jpg", raw, [cv2.IMWRITE_JPEG_QUALITY, self._JPEG_QUALITY]
                 )

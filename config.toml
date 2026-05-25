@@ -12,3 +12,10 @@ source = "mock"
 [camera.mock]
 # Speed multiplier for the figure-8 animation (higher = faster dot)
 dot_speed = 2.0
+
+[detection]
+threshold = 240
+min_area = 20
+max_area = 5000
+blur_kernel = 5
+trail_length = 50

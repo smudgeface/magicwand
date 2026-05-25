@@ -30,9 +30,19 @@ class CameraConfig:
 
 
 @dataclass
+class DetectionConfig:
+    threshold: int = 240
+    min_area: int = 20
+    max_area: int = 5000
+    blur_kernel: int = 5
+    trail_length: int = 50
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
+    detection: DetectionConfig = field(default_factory=DetectionConfig)
 
 
 def _load_config(path: Path | None) -> Config:
@@ -68,7 +78,16 @@ def _load_config(path: Path | None) -> Config:
         mock=mock,
     )
 
-    return Config(server=server, camera=camera)
+    detection_raw = raw.get("detection", {})
+    detection = DetectionConfig(
+        threshold=detection_raw.get("threshold", 240),
+        min_area=detection_raw.get("min_area", 20),
+        max_area=detection_raw.get("max_area", 5000),
+        blur_kernel=detection_raw.get("blur_kernel", 5),
+        trail_length=detection_raw.get("trail_length", 50),
+    )
+
+    return Config(server=server, camera=camera, detection=detection)
 
 
 _cached_config: Config | None = None
