@@ -7,6 +7,7 @@ samples to recognise wand gestures in real-time.
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -142,67 +143,205 @@ def preprocess(
 
 
 # ---------------------------------------------------------------------------
-# Dwell trimming
+# Gesture segmentation
 # ---------------------------------------------------------------------------
 
 
-def trim_dwells(
-    points: list[GesturePoint], speed_threshold: float = 0.05
-) -> list[GesturePoint]:
-    """Remove near-stationary points from the start and end of a gesture.
+@dataclass
+class Segment:
+    points: list[GesturePoint]
+    is_dwell: bool
+    avg_speed: float
 
-    Speed is measured as Euclidean distance / time delta between consecutive
-    points (in normalized coordinates per second). Points below the threshold
-    are considered "dwelling."
+
+def compute_speeds(points: list[GesturePoint]) -> list[float]:
+    """Compute speed between consecutive points (normalized units/sec).
+
+    Returns a list of len(points)-1 speeds.
     """
-    if len(points) < 2:
-        return points
-
-    # Compute speeds between consecutive points (len - 1 values).
-    # speeds[i] is the speed between points[i] and points[i+1].
-    speeds: list[float] = []
+    speeds = []
     for i in range(len(points) - 1):
         dx = points[i + 1].x - points[i].x
         dy = points[i + 1].y - points[i].y
         dt = points[i + 1].t - points[i].t
-        if dt == 0.0:
-            speeds.append(0.0)
+        dist = math.sqrt(dx * dx + dy * dy)
+        speed = dist / dt if dt > 0 else 0.0
+        speeds.append(speed)
+    return speeds
+
+
+def segment_at_dwells(
+    points: list[GesturePoint],
+    speed_threshold: float,
+    min_dwell_points: int,
+) -> list[Segment]:
+    """Split a point sequence into segments separated by dwells.
+
+    Each point is labeled "dwelling" if speed to the next point < threshold.
+    Consecutive same-label points are grouped into segments.
+    """
+    if len(points) < 2:
+        return [Segment(points=points, is_dwell=False, avg_speed=0.0)]
+
+    speeds = compute_speeds(points)
+    # Label each point (using speed of outgoing edge; last point inherits from prev)
+    labels = [s < speed_threshold for s in speeds]
+    labels.append(labels[-1] if labels else False)  # last point same as previous
+
+    # Group into runs of same label
+    segments = []
+    run_start = 0
+    for i in range(1, len(labels)):
+        if labels[i] != labels[run_start]:
+            seg_points = points[run_start:i]
+            is_dwell = labels[run_start]
+            seg_speeds = speeds[run_start : min(i, len(speeds))]
+            avg_spd = sum(seg_speeds) / len(seg_speeds) if seg_speeds else 0.0
+            segments.append(
+                Segment(points=seg_points, is_dwell=is_dwell, avg_speed=avg_spd)
+            )
+            run_start = i
+    # Final segment
+    seg_points = points[run_start:]
+    is_dwell = labels[run_start]
+    seg_speeds = speeds[run_start : len(speeds)]
+    avg_spd = sum(seg_speeds) / len(seg_speeds) if seg_speeds else 0.0
+    segments.append(
+        Segment(points=seg_points, is_dwell=is_dwell, avg_speed=avg_spd)
+    )
+
+    # Merge short non-dwell runs into adjacent dwells (noise)
+    # A moving segment with fewer than min_dwell_points is probably noise within a dwell
+    merged = []
+    for seg in segments:
+        if not seg.is_dwell and len(seg.points) < min_dwell_points:
+            seg = Segment(points=seg.points, is_dwell=True, avg_speed=seg.avg_speed)
+        merged.append(seg)
+
+    # Collapse adjacent same-label segments
+    collapsed = [merged[0]]
+    for seg in merged[1:]:
+        if seg.is_dwell == collapsed[-1].is_dwell:
+            combined_pts = collapsed[-1].points + seg.points
+            combined_spd = (collapsed[-1].avg_speed + seg.avg_speed) / 2
+            collapsed[-1] = Segment(
+                points=combined_pts, is_dwell=seg.is_dwell, avg_speed=combined_spd
+            )
         else:
-            speeds.append(math.hypot(dx, dy) / dt)
+            collapsed.append(seg)
 
-    # Trim from start: find the first index where speed >= threshold.
-    # speeds[i] corresponds to the segment starting at points[i], so
-    # the first "moving" point is the one whose outgoing speed is above
-    # the threshold.
-    first_moving = 0
-    for i in range(len(speeds)):
-        if speeds[i] >= speed_threshold:
-            first_moving = i
-            break
-    else:
-        # All speeds below threshold — don't over-trim
-        return points
+    return collapsed
 
-    # Trim from end: find the last index where speed >= threshold.
-    # speeds[i] is the segment between points[i] and points[i+1], so
-    # the last "moving" point is points[i+1] for the last fast segment.
-    last_moving = len(points) - 1
-    for i in range(len(speeds) - 1, -1, -1):
-        if speeds[i] >= speed_threshold:
-            last_moving = i + 1
-            break
 
-    # Ensure first_moving <= last_moving
-    if first_moving > last_moving:
-        return points
+def linearity(points: list[GesturePoint]) -> float:
+    """Compute R-squared of a linear least-squares fit. Returns 0-1 (1 = perfectly linear).
 
-    trimmed = points[first_moving : last_moving + 1]
+    Uses both x and y coordinates — fits a line in 2D via principal component analysis.
+    R-squared = variance explained by the first principal component / total variance.
+    """
+    if len(points) < 3:
+        return 1.0  # degenerate case, treat as linear
 
-    # If the result would have fewer than 2 points, return the original
-    if len(trimmed) < 2:
-        return points
+    xs = [p.x for p in points]
+    ys = [p.y for p in points]
 
-    return trimmed
+    # Center the data
+    mx = sum(xs) / len(xs)
+    my = sum(ys) / len(ys)
+
+    # Covariance matrix elements
+    cxx = sum((x - mx) ** 2 for x in xs) / len(xs)
+    cyy = sum((y - my) ** 2 for y in ys) / len(ys)
+    cxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / len(xs)
+
+    total_var = cxx + cyy
+    if total_var < 1e-10:
+        return 1.0  # all points same location
+
+    # Eigenvalues of 2x2 covariance matrix
+    # lambda = ((cxx+cyy) +/- sqrt((cxx-cyy)^2 + 4*cxy^2)) / 2
+    discriminant = math.sqrt((cxx - cyy) ** 2 + 4 * cxy ** 2)
+    lambda1 = (cxx + cyy + discriminant) / 2  # larger eigenvalue
+
+    return lambda1 / total_var
+
+
+def total_curvature(points: list[GesturePoint]) -> float:
+    """Sum of absolute angle changes between consecutive direction vectors.
+
+    Returns total curvature in radians. A straight line = 0, a full circle ~ 2*pi.
+    """
+    if len(points) < 3:
+        return 0.0
+
+    total = 0.0
+    for i in range(1, len(points) - 1):
+        # Direction vectors
+        dx1 = points[i].x - points[i - 1].x
+        dy1 = points[i].y - points[i - 1].y
+        dx2 = points[i + 1].x - points[i].x
+        dy2 = points[i + 1].y - points[i].y
+
+        # Angle between consecutive direction vectors
+        len1 = math.sqrt(dx1 * dx1 + dy1 * dy1)
+        len2 = math.sqrt(dx2 * dx2 + dy2 * dy2)
+
+        if len1 < 1e-10 or len2 < 1e-10:
+            continue
+
+        # Cross product gives sin(angle), dot product gives cos(angle)
+        cross = dx1 * dy2 - dy1 * dx2
+        dot = dx1 * dx2 + dy1 * dy2
+        angle = abs(math.atan2(cross, dot))
+        total += angle
+
+    return total
+
+
+def extract_gesture_candidates(
+    points: list[GesturePoint],
+    speed_threshold: float = 0.05,
+    min_dwell_points: int = 3,
+    min_points: int = 10,
+    min_duration: float = 0.2,
+    linearity_threshold: float = 0.85,
+    min_curvature: float = 1.57,
+) -> list[list[GesturePoint]]:
+    """Full segmentation pipeline: segment at dwells -> filter trivial -> return candidates."""
+
+    # 1. Segment at dwells
+    segments = segment_at_dwells(points, speed_threshold, min_dwell_points)
+
+    # 2. Collect non-dwell (motion) segments
+    motion_segments = [s for s in segments if not s.is_dwell]
+
+    # 3. Filter each motion segment
+    candidates = []
+    for seg in motion_segments:
+        pts = seg.points
+
+        # Too few points
+        if len(pts) < min_points:
+            continue
+
+        # Too short duration
+        duration = pts[-1].t - pts[0].t if len(pts) > 1 else 0
+        if duration < min_duration:
+            continue
+
+        # Too linear (entry/exit trails are straight swings)
+        r_squared = linearity(pts)
+        if r_squared > linearity_threshold:
+            continue
+
+        # Too little curvature
+        curvature = total_curvature(pts)
+        if curvature < min_curvature:
+            continue
+
+        candidates.append(pts)
+
+    return candidates
 
 
 # ---------------------------------------------------------------------------
@@ -346,31 +485,59 @@ class GestureWatcher:
         return None
 
     def _attempt_match(self) -> MatchResult:
-        """Preprocess captured points and match against stored gestures."""
-        # Too few points — reject
-        if len(self._points) < self._config.min_gesture_points:
+        """Segment captured points, extract gesture candidates, and match."""
+        # Extract gesture candidates using segmentation
+        candidates = extract_gesture_candidates(
+            self._points,
+            speed_threshold=self._config.dwell_speed_threshold,
+            min_dwell_points=self._config.dwell_min_points,
+            min_points=self._config.min_gesture_points,
+            min_duration=self._config.min_segment_duration,
+            linearity_threshold=self._config.linearity_threshold,
+            min_curvature=self._config.min_curvature,
+        )
+
+        trimmed_count = len(self._points) - sum(len(c) for c in candidates)
+
+        if not candidates:
             result = MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
-                distance=float("inf"),
+                distance=0.0,
                 all_scores={},
             )
             if self._capture_store:
-                self._capture_store.add(self._points, result, 0)
+                self._capture_store.add(self._points, result, trimmed_count)
+            self._state = WatcherState.COOLDOWN
+            self._cooldown_until = time.monotonic() + self._config.cooldown_time
             return result
 
-        # Dwell trimming — remove near-stationary clusters at start/end
-        if self._config.dwell_trim_enabled:
-            trimmed = trim_dwells(self._points, self._config.dwell_speed_threshold)
-            trimmed_count = len(self._points) - len(trimmed)
-            points_for_matching = trimmed
-        else:
-            trimmed_count = 0
-            points_for_matching = self._points
+        # Try each candidate until one matches
+        last_result: MatchResult | None = None
+        for candidate in candidates:
+            preprocessed = preprocess(candidate, self._config.resample_count)
+            result = self._compare_against_store(preprocessed)
+            if result.matched:
+                if self._capture_store:
+                    self._capture_store.add(self._points, result, trimmed_count)
+                return result
+            last_result = result
 
-        captured = preprocess(points_for_matching, self._config.resample_count)
+        # No candidate matched — return the last comparison result
+        assert last_result is not None
+        if self._capture_store:
+            self._capture_store.add(self._points, last_result, trimmed_count)
+        return last_result
 
+    def _compare_against_store(
+        self, preprocessed: list[tuple[float, float]]
+    ) -> MatchResult:
+        """Compare a preprocessed candidate against all stored gestures.
+
+        Applies distance threshold, confidence, and ambiguity checks.
+        Returns a MatchResult.
+        """
         all_scores: dict[str, float] = {}
 
         for gesture_name in self._store.list():
@@ -379,22 +546,19 @@ class GestureWatcher:
                 continue
             best_dist = float("inf")
             for sample in samples:
-                d = dtw_distance(captured, sample)
+                d = dtw_distance(preprocessed, sample)
                 if d < best_dist:
                     best_dist = d
             all_scores[gesture_name] = best_dist
 
         if not all_scores:
-            result = MatchResult(
+            return MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
                 distance=float("inf"),
                 all_scores=all_scores,
             )
-            if self._capture_store:
-                self._capture_store.add(self._points, result, trimmed_count)
-            return result
 
         # Sort gestures by distance
         ranked = sorted(all_scores.items(), key=lambda kv: kv[1])
@@ -402,16 +566,13 @@ class GestureWatcher:
 
         # Distance threshold check
         if best_dist > self._config.distance_threshold:
-            result = MatchResult(
+            return MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
                 distance=best_dist,
                 all_scores=all_scores,
             )
-            if self._capture_store:
-                self._capture_store.add(self._points, result, trimmed_count)
-            return result
 
         # Compute confidence
         confidence = 1.0 - (best_dist / self._config.distance_threshold)
@@ -419,16 +580,13 @@ class GestureWatcher:
 
         # Minimum confidence check
         if confidence < self._config.min_confidence:
-            result = MatchResult(
+            return MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=confidence,
                 distance=best_dist,
                 all_scores=all_scores,
             )
-            if self._capture_store:
-                self._capture_store.add(self._points, result, trimmed_count)
-            return result
 
         # Ambiguity check: reject if 2nd best is within 20% of best
         if len(ranked) >= 2:
@@ -436,41 +594,32 @@ class GestureWatcher:
             if best_dist > 0:
                 ratio = (second_dist - best_dist) / best_dist
                 if ratio < 0.20:
-                    result = MatchResult(
+                    return MatchResult(
                         matched=False,
                         gesture_name=None,
                         confidence=confidence,
                         distance=best_dist,
                         all_scores=all_scores,
                     )
-                    if self._capture_store:
-                        self._capture_store.add(self._points, result, trimmed_count)
-                    return result
             else:
                 # best_dist == 0 — only ambiguous if second is also 0
                 if second_dist == 0:
-                    result = MatchResult(
+                    return MatchResult(
                         matched=False,
                         gesture_name=None,
                         confidence=confidence,
                         distance=best_dist,
                         all_scores=all_scores,
                     )
-                    if self._capture_store:
-                        self._capture_store.add(self._points, result, trimmed_count)
-                    return result
 
         # Match!
-        result = MatchResult(
+        return MatchResult(
             matched=True,
             gesture_name=best_name,
             confidence=confidence,
             distance=best_dist,
             all_scores=all_scores,
         )
-        if self._capture_store:
-            self._capture_store.add(self._points, result, trimmed_count)
-        return result
 
     def invalidate_cache(self, gesture_name: str | None = None) -> None:
         """Clear the preprocessed sample cache.

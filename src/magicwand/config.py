@@ -25,8 +25,10 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     fps: int = 30
-    source: str = "mock"
+    source: str = "auto"
     mock: MockCameraConfig = field(default_factory=MockCameraConfig)
+    webcam_device: int = 0
+    webcam_exposure: float | None = None
 
 
 @dataclass
@@ -52,7 +54,10 @@ class MatchingConfig:
     min_gesture_points: int = 10
     resample_count: int = 32
     dwell_speed_threshold: float = 0.05
-    dwell_trim_enabled: bool = True
+    dwell_min_points: int = 3
+    linearity_threshold: float = 0.85
+    min_curvature: float = 1.57
+    min_segment_duration: float = 0.2
 
 
 @dataclass
@@ -119,12 +124,15 @@ def _load_config(path: Path | None) -> Config:
     mock = MockCameraConfig(
         dot_speed=mock_raw.get("dot_speed", 2.0),
     )
+    webcam_exposure_raw = camera_raw.get("webcam_exposure")
     camera = CameraConfig(
         width=camera_raw.get("width", 640),
         height=camera_raw.get("height", 480),
         fps=camera_raw.get("fps", 30),
-        source=camera_raw.get("source", "mock"),
+        source=camera_raw.get("source", "auto"),
         mock=mock,
+        webcam_device=camera_raw.get("webcam_device", 0),
+        webcam_exposure=float(webcam_exposure_raw) if webcam_exposure_raw is not None else None,
     )
 
     detection_raw = raw.get("detection", {})
@@ -150,7 +158,10 @@ def _load_config(path: Path | None) -> Config:
         min_gesture_points=matching_raw.get("min_gesture_points", 10),
         resample_count=matching_raw.get("resample_count", 32),
         dwell_speed_threshold=matching_raw.get("dwell_speed_threshold", 0.05),
-        dwell_trim_enabled=matching_raw.get("dwell_trim_enabled", True),
+        dwell_min_points=matching_raw.get("dwell_min_points", 3),
+        linearity_threshold=matching_raw.get("linearity_threshold", 0.85),
+        min_curvature=matching_raw.get("min_curvature", 1.57),
+        min_segment_duration=matching_raw.get("min_segment_duration", 0.2),
     )
 
     captures_raw = raw.get("captures", {})
