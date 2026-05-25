@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
 from magicwand.config import Config, clear_config_cache, get_config
+from magicwand.detection import Detector
 from magicwand.web.routes import router as page_router
 from magicwand.web.stream import router as stream_router
 
@@ -37,13 +38,15 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     # Build camera objects early so lifespan can close over them.
     camera_source = make_camera_source(config.camera)
     frame_buffer = FrameBuffer()
-    camera_thread = CameraThread(camera_source, frame_buffer, config.camera.fps)
+    detector = Detector(config.detection)
+    camera_thread = CameraThread(camera_source, frame_buffer, config.camera.fps, detector)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Startup
         app.state.frame_buffer = frame_buffer
         app.state.camera_thread = camera_thread
+        app.state.detector = detector
         camera_thread.start()
         logger.info(
             "magicwand started — camera source=%s, server=%s:%d",
