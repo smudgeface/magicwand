@@ -182,3 +182,42 @@ async def stop_recording(request: Request) -> dict:
         "sample": [{"x": p.x, "y": p.y, "t": p.t} for p in sample],
         "point_count": len(sample),
     }
+
+
+# ---------------------------------------------------------------------------
+# Matching endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/matching/status")
+async def matching_status(request: Request) -> dict:
+    """Return the current gesture watcher state and most recent match result."""
+    watcher = request.app.state.watcher
+    last = watcher.last_match
+    return {
+        "state": watcher.state.value,
+        "last_match": {
+            "matched": last.matched,
+            "gesture_name": last.gesture_name,
+            "confidence": round(last.confidence, 3),
+            "distance": round(last.distance, 4),
+        } if last else None,
+    }
+
+
+@router.put("/api/settings/matching")
+async def update_matching_settings(request: Request) -> dict:
+    """Update gesture matching parameters at runtime."""
+    body = await request.json()
+    watcher = request.app.state.watcher
+    cfg = watcher._config
+    for key, value in body.items():
+        if hasattr(cfg, key):
+            setattr(cfg, key, value)
+    return {
+        "distance_threshold": cfg.distance_threshold,
+        "min_confidence": cfg.min_confidence,
+        "gap_timeout": cfg.gap_timeout,
+        "cooldown_time": cfg.cooldown_time,
+        "min_gesture_points": cfg.min_gesture_points,
+        "resample_count": cfg.resample_count,
+    }

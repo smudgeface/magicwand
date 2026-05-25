@@ -22,3 +22,11 @@ trail_length = 50
 
 [gestures]
 directory = "gestures"
+
+[matching]
+distance_threshold = 2.0
+min_confidence = 0.6
+gap_timeout = 0.5
+cooldown_time = 2.0
+min_gesture_points = 10
+resample_count = 32
