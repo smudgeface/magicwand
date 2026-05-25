@@ -1,0 +1,16 @@
+[Unit]
+Description=magicwand gesture tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/magicwand
+ExecStart=/home/admin/magicwand/.venv/bin/python -m magicwand.main
+Restart=on-failure
+RestartSec=5
+Environment=MAGICWAND_CONFIG=/home/admin/magicwand/config.toml
+
+[Install]
+WantedBy=multi-user.target

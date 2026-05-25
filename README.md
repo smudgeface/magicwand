@@ -38,6 +38,11 @@ authoring:
   target URL + JSON payload
 - Gesture playback / test runner
 
+## Documentation
+
+- [Implementation plan](docs/implementation-plan.md) — phased build plan with
+  technical details for each component
+
 ## Status
 
 Early — hardware is being assembled and the Pi is being provisioned.
