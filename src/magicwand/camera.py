@@ -152,12 +152,13 @@ class CameraThread(threading.Thread):
     _JPEG_QUALITY = 80
     _LOG_FPS_INTERVAL = 5.0  # seconds between FPS log messages
 
-    def __init__(self, source: CameraSource, buffer: FrameBuffer, fps: int, detector=None) -> None:
+    def __init__(self, source: CameraSource, buffer: FrameBuffer, fps: int, detector=None, recorder=None) -> None:
         super().__init__(name="camera-thread", daemon=True)
         self._source = source
         self._buffer = buffer
         self._fps = fps
         self._detector = detector
+        self._recorder = recorder
         self._stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -180,6 +181,8 @@ class CameraThread(threading.Thread):
 
                 if self._detector is not None:
                     raw, result = self._detector.process(raw)
+                    if self._recorder is not None:
+                        self._recorder.feed(result, time.monotonic())
 
                 ok, buf = cv2.imencode(
                     ".jpg", raw, [cv2.IMWRITE_JPEG_QUALITY, self._JPEG_QUALITY]

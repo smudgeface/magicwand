@@ -14,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
 from magicwand.config import Config, clear_config_cache, get_config
 from magicwand.detection import Detector
+from magicwand.gestures import GestureStore
+from magicwand.recorder import Recorder
 from magicwand.web.routes import router as page_router
 from magicwand.web.stream import router as stream_router
 
@@ -35,11 +37,20 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
 
     config: Config = get_config(config_path)
 
+    # Resolve gestures directory relative to config file location or CWD.
+    if config_path is not None:
+        gestures_dir = Path(config_path).parent / config.gestures.directory
+    else:
+        gestures_dir = Path.cwd() / config.gestures.directory
+    gestures_dir.mkdir(parents=True, exist_ok=True)
+
     # Build camera objects early so lifespan can close over them.
     camera_source = make_camera_source(config.camera)
     frame_buffer = FrameBuffer()
     detector = Detector(config.detection)
-    camera_thread = CameraThread(camera_source, frame_buffer, config.camera.fps, detector)
+    gesture_store = GestureStore(gestures_dir)
+    recorder = Recorder(config.camera.width, config.camera.height)
+    camera_thread = CameraThread(camera_source, frame_buffer, config.camera.fps, detector, recorder)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -47,6 +58,8 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         app.state.frame_buffer = frame_buffer
         app.state.camera_thread = camera_thread
         app.state.detector = detector
+        app.state.gesture_store = gesture_store
+        app.state.recorder = recorder
         camera_thread.start()
         logger.info(
             "magicwand started — camera source=%s, server=%s:%d",

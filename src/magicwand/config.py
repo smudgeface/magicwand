@@ -39,10 +39,16 @@ class DetectionConfig:
 
 
 @dataclass
+class GesturesConfig:
+    directory: str = "gestures"
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
+    gestures: GesturesConfig = field(default_factory=GesturesConfig)
 
 
 def _load_config(path: Path | None) -> Config:
@@ -87,7 +93,12 @@ def _load_config(path: Path | None) -> Config:
         trail_length=detection_raw.get("trail_length", 50),
     )
 
-    return Config(server=server, camera=camera, detection=detection)
+    gestures_raw = raw.get("gestures", {})
+    gestures = GesturesConfig(
+        directory=gestures_raw.get("directory", "gestures"),
+    )
+
+    return Config(server=server, camera=camera, detection=detection, gestures=gestures)
 
 
 _cached_config: Config | None = None
