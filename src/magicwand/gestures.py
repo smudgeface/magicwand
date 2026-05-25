@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +43,7 @@ class GestureStore:
         self._dir = gestures_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._gestures: dict[str, Gesture] = {}
+        self.on_change: Callable[[str | None], None] | None = None
         # Load existing gesture files
         for path in sorted(self._dir.glob("*.json")):
             try:
@@ -77,6 +79,8 @@ class GestureStore:
         )
         self._gestures[name] = gesture
         self._save(gesture)
+        if self.on_change:
+            self.on_change(name)
         return gesture
 
     def delete(self, name: str) -> bool:
@@ -87,6 +91,8 @@ class GestureStore:
         path = self._dir / f"{name}.json"
         if path.exists():
             path.unlink()
+        if self.on_change:
+            self.on_change(name)
         return True
 
     def add_sample(self, name: str, sample: GestureSample) -> int:
@@ -100,6 +106,8 @@ class GestureStore:
             raise ValueError(f"Gesture not found: {name!r}")
         gesture.samples.append(sample)
         self._save(gesture)
+        if self.on_change:
+            self.on_change(name)
         return len(gesture.samples)
 
     def remove_sample(self, name: str, index: int) -> bool:
@@ -111,6 +119,8 @@ class GestureStore:
             return False
         gesture.samples.pop(index)
         self._save(gesture)
+        if self.on_change:
+            self.on_change(name)
         return True
 
     def _save(self, gesture: Gesture) -> None:

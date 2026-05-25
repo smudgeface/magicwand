@@ -44,11 +44,22 @@ class GesturesConfig:
 
 
 @dataclass
+class MatchingConfig:
+    distance_threshold: float = 2.0
+    min_confidence: float = 0.6
+    gap_timeout: float = 0.5
+    cooldown_time: float = 2.0
+    min_gesture_points: int = 10
+    resample_count: int = 32
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     gestures: GesturesConfig = field(default_factory=GesturesConfig)
+    matching: MatchingConfig = field(default_factory=MatchingConfig)
 
 
 def _load_config(path: Path | None) -> Config:
@@ -98,7 +109,17 @@ def _load_config(path: Path | None) -> Config:
         directory=gestures_raw.get("directory", "gestures"),
     )
 
-    return Config(server=server, camera=camera, detection=detection, gestures=gestures)
+    matching_raw = raw.get("matching", {})
+    matching = MatchingConfig(
+        distance_threshold=matching_raw.get("distance_threshold", 2.0),
+        min_confidence=matching_raw.get("min_confidence", 0.6),
+        gap_timeout=matching_raw.get("gap_timeout", 0.5),
+        cooldown_time=matching_raw.get("cooldown_time", 2.0),
+        min_gesture_points=matching_raw.get("min_gesture_points", 10),
+        resample_count=matching_raw.get("resample_count", 32),
+    )
+
+    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching)
 
 
 _cached_config: Config | None = None
