@@ -9,6 +9,8 @@
       <span class="status-item" id="camera-source">Camera: —</span>
       <span class="status-sep">•</span>
       <span class="status-item" id="stream-fps">FPS: —</span>
+      <span class="status-sep">•</span>
+      <button id="btn-capture-toggle" class="btn btn-sm btn-secondary" onclick="toggleCapture()">Stop Capture</button>
     </div>
   </div>
   <section class="card event-log-section">
@@ -30,6 +32,22 @@
   const info = await fetch('/api/system/info').then(r => r.json());
   document.getElementById('camera-source').textContent = 'Camera: ' + info.camera_source;
   document.getElementById('stream-fps').textContent = 'FPS: ' + info.detection_fps;
+  const status = await fetch('/api/camera/status').then(r => r.json());
+  updateCaptureButton(status.capturing);
 })();
+
+function updateCaptureButton(capturing) {
+  const btn = document.getElementById('btn-capture-toggle');
+  btn.textContent = capturing ? 'Stop Capture' : 'Start Capture';
+  btn.className = capturing ? 'btn btn-sm btn-danger' : 'btn btn-sm btn-success';
+}
+
+async function toggleCapture() {
+  const btn = document.getElementById('btn-capture-toggle');
+  const isCapturing = btn.textContent === 'Stop Capture';
+  const endpoint = isCapturing ? '/api/camera/stop' : '/api/camera/start';
+  const result = await fetch(endpoint, { method: 'POST' }).then(r => r.json());
+  updateCaptureButton(result.capturing);
+}
 </script>
 {% endblock %}

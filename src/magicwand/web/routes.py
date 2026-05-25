@@ -91,6 +91,29 @@ async def health() -> dict:
     return {"status": "ok", "uptime": round(time.monotonic() - _start_time, 1)}
 
 
+@router.get("/api/camera/status")
+async def camera_status(request: Request) -> dict:
+    """Return whether the camera capture is running or paused."""
+    ct = request.app.state.camera_thread
+    return {"capturing": not ct.paused}
+
+
+@router.post("/api/camera/start")
+async def camera_start(request: Request) -> dict:
+    """Resume camera capture."""
+    ct = request.app.state.camera_thread
+    ct.resume()
+    return {"capturing": True}
+
+
+@router.post("/api/camera/stop")
+async def camera_stop(request: Request) -> dict:
+    """Pause camera capture."""
+    ct = request.app.state.camera_thread
+    ct.pause()
+    return {"capturing": False}
+
+
 @router.get("/api/system/info")
 async def system_info(request: Request) -> dict:
     """Return system stats: uptime, CPU temp, RAM, disk, camera, FPS, versions."""
