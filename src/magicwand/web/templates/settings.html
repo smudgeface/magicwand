@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% set active_page = "settings" %}
+{% block title %}Settings — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <h2>Settings</h2>
+
+  <!-- Detection settings -->
+  <section class="card">
+    <h3>Detection</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Threshold (0-255)</label>
+        <input type="range" id="det-threshold" class="input-range" min="0" max="255" value="240">
+        <span id="det-threshold-val" class="range-value">240</span>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Min Area</label>
+        <input type="number" id="det-min-area" class="input" value="20" min="1" max="10000">
+      </div>
+      <div class="form-group">
+        <label>Max Area</label>
+        <input type="number" id="det-max-area" class="input" value="5000" min="1" max="100000">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Blur Kernel</label>
+        <select id="det-blur" class="input">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="7">7</option>
+          <option value="9">9</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Trail Length</label>
+        <input type="number" id="det-trail" class="input" value="50" min="5" max="200">
+      </div>
+    </div>
+    <button id="btn-apply-detection" class="btn btn-primary">Apply</button>
+    <span id="det-status" class="setting-status"></span>
+  </section>
+
+  <!-- Matching settings -->
+  <section class="card">
+    <h3>Matching</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Distance Threshold</label>
+        <input type="number" id="match-dist" class="input" value="2.0" min="0.5" max="5.0" step="0.1">
+      </div>
+      <div class="form-group">
+        <label>Min Confidence</label>
+        <input type="number" id="match-conf" class="input" value="0.6" min="0.0" max="1.0" step="0.05">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Gap Timeout (s)</label>
+        <input type="number" id="match-gap" class="input" value="0.5" min="0.1" max="2.0" step="0.1">
+      </div>
+      <div class="form-group">
+        <label>Cooldown (s)</label>
+        <input type="number" id="match-cooldown" class="input" value="2.0" min="0.5" max="10.0" step="0.5">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Min Gesture Points</label>
+      <input type="number" id="match-min-pts" class="input" value="10" min="5" max="50">
+    </div>
+    <button id="btn-apply-matching" class="btn btn-primary">Apply</button>
+    <span id="match-status" class="setting-status"></span>
+  </section>
+
+  <!-- System info -->
+  <section class="card">
+    <h3>System</h3>
+    <div id="system-info" class="system-info-grid">
+      <div class="info-item"><span class="info-label">Uptime</span><span id="info-uptime" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">CPU Temp</span><span id="info-cpu-temp" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">RAM</span><span id="info-ram" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">Disk</span><span id="info-disk" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">Camera</span><span id="info-camera" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">FPS</span><span id="info-fps" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">Python</span><span id="info-python" class="info-value">—</span></div>
+      <div class="info-item"><span class="info-label">Version</span><span id="info-version" class="info-value">—</span></div>
+    </div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/settings.js"></script>
+{% endblock %}

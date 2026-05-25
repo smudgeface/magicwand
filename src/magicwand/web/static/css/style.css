@@ -274,3 +274,21 @@ select.input { appearance: auto; }
 .ws-status { font-size: 0.75rem; }
 .ws-status.connected { color: #22c55e; }
 .ws-status.disconnected { color: #dc2626; }
+
+/* Settings page */
+.input-range { width: 100%; accent-color: #7c3aed; }
+.range-value { color: #c4b5fd; font-size: 0.9rem; margin-left: 0.5rem; }
+.setting-status { margin-left: 0.75rem; font-size: 0.85rem; }
+.setting-status.success { color: #22c55e; }
+.setting-status.error { color: #dc2626; }
+
+.system-info-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+.info-item {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.75rem; background: #0f0f1a; border-radius: 8px;
+}
+.info-label { color: #8888aa; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.info-value { color: #e0e0e0; font-size: 1rem; }
