@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -91,7 +91,6 @@ async def create_gesture(request: Request) -> dict:
     try:
         gesture = store.create(name)
     except ValueError as e:
-        from fastapi.responses import JSONResponse
         return JSONResponse({"error": str(e)}, status_code=400)
     return {"name": gesture.name, "created_at": gesture.created_at}
 
@@ -102,7 +101,6 @@ async def get_gesture(request: Request, name: str) -> dict:
     store = request.app.state.gesture_store
     g = store.get(name)
     if g is None:
-        from fastapi.responses import JSONResponse
         return JSONResponse({"error": "not found"}, status_code=404)
     return {
         "name": g.name,
@@ -118,7 +116,6 @@ async def delete_gesture(request: Request, name: str) -> dict:
     """Delete a gesture by name."""
     store = request.app.state.gesture_store
     if not store.delete(name):
-        from fastapi.responses import JSONResponse
         return JSONResponse({"error": "not found"}, status_code=404)
     return {"deleted": name}
 
@@ -133,7 +130,6 @@ async def add_sample(request: Request, name: str) -> dict:
     try:
         count = store.add_sample(name, sample)
     except ValueError as e:
-        from fastapi.responses import JSONResponse
         return JSONResponse({"error": str(e)}, status_code=404)
     return {"sample_count": count}
 
@@ -143,7 +139,6 @@ async def remove_sample(request: Request, name: str, index: int) -> dict:
     """Remove a sample from a gesture by index."""
     store = request.app.state.gesture_store
     if not store.remove_sample(name, index):
-        from fastapi.responses import JSONResponse
         return JSONResponse({"error": "sample not found"}, status_code=404)
     return {"removed": index}
 
@@ -221,3 +216,69 @@ async def update_matching_settings(request: Request) -> dict:
         "min_gesture_points": cfg.min_gesture_points,
         "resample_count": cfg.resample_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# Action endpoints
+# ---------------------------------------------------------------------------
+
+@router.put("/api/gestures/{name}/action")
+async def set_action(request: Request, name: str) -> dict:
+    """Set or update the action for a gesture."""
+    body = await request.json()
+    store = request.app.state.gesture_store
+    if not store.set_action(name, body):
+        return JSONResponse({"error": "gesture not found"}, status_code=404)
+    return {"name": name, "action": body}
+
+
+@router.delete("/api/gestures/{name}/action")
+async def clear_action(request: Request, name: str) -> dict:
+    """Clear the action for a gesture."""
+    store = request.app.state.gesture_store
+    if not store.set_action(name, None):
+        return JSONResponse({"error": "gesture not found"}, status_code=404)
+    return {"name": name, "action": None}
+
+
+@router.post("/api/gestures/{name}/action/test")
+async def test_action(request: Request, name: str) -> dict:
+    """Fire the gesture's action immediately (for testing)."""
+    store = request.app.state.gesture_store
+    g = store.get(name)
+    if g is None:
+        return JSONResponse({"error": "gesture not found"}, status_code=404)
+    if g.action is None:
+        return JSONResponse({"error": "no action configured"}, status_code=400)
+    from magicwand.actions import ActionConfig
+    dispatcher = request.app.state.action_dispatcher
+    config = ActionConfig(**g.action)
+    result = await dispatcher.fire(config)
+    return {
+        "success": result.success,
+        "status_code": result.status_code,
+        "latency_ms": round(result.latency_ms, 1),
+        "error": result.error,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Homebridge endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/api/homebridge/presets")
+async def homebridge_presets(request: Request) -> list[dict]:
+    """Return available Homebridge presets with host/port filled in."""
+    from magicwand.config import get_config
+    cfg = get_config()
+    hb = cfg.homebridge
+    result = []
+    for p in hb.presets:
+        result.append({
+            "name": p.name,
+            "method": p.method,
+            "url_template": p.url_template.format(
+                host=hb.host, port=hb.port, accessory_id="{accessory_id}"
+            ),
+        })
+    return result

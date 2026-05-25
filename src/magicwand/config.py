@@ -54,12 +54,27 @@ class MatchingConfig:
 
 
 @dataclass
+class HomebridgePreset:
+    name: str = ""
+    method: str = "GET"
+    url_template: str = ""
+
+
+@dataclass
+class HomebridgeConfig:
+    host: str = "homebridge.local"
+    port: int = 8581
+    presets: list[HomebridgePreset] = field(default_factory=list)
+
+
+@dataclass
 class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     gestures: GesturesConfig = field(default_factory=GesturesConfig)
     matching: MatchingConfig = field(default_factory=MatchingConfig)
+    homebridge: HomebridgeConfig = field(default_factory=HomebridgeConfig)
 
 
 def _load_config(path: Path | None) -> Config:
@@ -119,7 +134,22 @@ def _load_config(path: Path | None) -> Config:
         resample_count=matching_raw.get("resample_count", 32),
     )
 
-    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching)
+    homebridge_raw = raw.get("homebridge", {})
+    homebridge_presets = [
+        HomebridgePreset(
+            name=p.get("name", ""),
+            method=p.get("method", "GET"),
+            url_template=p.get("url_template", ""),
+        )
+        for p in homebridge_raw.get("presets", [])
+    ]
+    homebridge = HomebridgeConfig(
+        host=homebridge_raw.get("host", "homebridge.local"),
+        port=homebridge_raw.get("port", 8581),
+        presets=homebridge_presets,
+    )
+
+    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching, homebridge=homebridge)
 
 
 _cached_config: Config | None = None

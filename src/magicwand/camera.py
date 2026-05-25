@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import queue
 import threading
 import time
 from typing import Protocol
@@ -162,6 +163,8 @@ class CameraThread(threading.Thread):
         watcher=None,
         frame_width: int = 640,
         frame_height: int = 480,
+        gesture_store=None,
+        action_queue: queue.Queue | None = None,
     ) -> None:
         super().__init__(name="camera-thread", daemon=True)
         self._source = source
@@ -172,6 +175,8 @@ class CameraThread(threading.Thread):
         self._watcher = watcher
         self._source_width = frame_width
         self._source_height = frame_height
+        self._gesture_store = gesture_store
+        self._action_queue = action_queue
         self._stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -200,7 +205,12 @@ class CameraThread(threading.Thread):
                     if self._watcher is not None:
                         from magicwand.recorder import RecordingState
                         if self._recorder is None or self._recorder.state == RecordingState.IDLE:
-                            self._watcher.feed(result, ts, self._source_width, self._source_height)
+                            match_result = self._watcher.feed(result, ts, self._source_width, self._source_height)
+                            if match_result and match_result.matched:
+                                if self._gesture_store and self._action_queue is not None:
+                                    gesture = self._gesture_store.get(match_result.gesture_name)
+                                    if gesture and gesture.action:
+                                        self._action_queue.put(gesture.action)
 
                 ok, buf = cv2.imencode(
                     ".jpg", raw, [cv2.IMWRITE_JPEG_QUALITY, self._JPEG_QUALITY]
