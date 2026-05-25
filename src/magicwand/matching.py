@@ -9,10 +9,14 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from magicwand.config import MatchingConfig
 from magicwand.detection import DetectionResult
 from magicwand.gestures import GesturePoint, GestureSample, GestureStore
+
+if TYPE_CHECKING:
+    from magicwand.captures import CaptureStore
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +142,70 @@ def preprocess(
 
 
 # ---------------------------------------------------------------------------
+# Dwell trimming
+# ---------------------------------------------------------------------------
+
+
+def trim_dwells(
+    points: list[GesturePoint], speed_threshold: float = 0.05
+) -> list[GesturePoint]:
+    """Remove near-stationary points from the start and end of a gesture.
+
+    Speed is measured as Euclidean distance / time delta between consecutive
+    points (in normalized coordinates per second). Points below the threshold
+    are considered "dwelling."
+    """
+    if len(points) < 2:
+        return points
+
+    # Compute speeds between consecutive points (len - 1 values).
+    # speeds[i] is the speed between points[i] and points[i+1].
+    speeds: list[float] = []
+    for i in range(len(points) - 1):
+        dx = points[i + 1].x - points[i].x
+        dy = points[i + 1].y - points[i].y
+        dt = points[i + 1].t - points[i].t
+        if dt == 0.0:
+            speeds.append(0.0)
+        else:
+            speeds.append(math.hypot(dx, dy) / dt)
+
+    # Trim from start: find the first index where speed >= threshold.
+    # speeds[i] corresponds to the segment starting at points[i], so
+    # the first "moving" point is the one whose outgoing speed is above
+    # the threshold.
+    first_moving = 0
+    for i in range(len(speeds)):
+        if speeds[i] >= speed_threshold:
+            first_moving = i
+            break
+    else:
+        # All speeds below threshold — don't over-trim
+        return points
+
+    # Trim from end: find the last index where speed >= threshold.
+    # speeds[i] is the segment between points[i] and points[i+1], so
+    # the last "moving" point is points[i+1] for the last fast segment.
+    last_moving = len(points) - 1
+    for i in range(len(speeds) - 1, -1, -1):
+        if speeds[i] >= speed_threshold:
+            last_moving = i + 1
+            break
+
+    # Ensure first_moving <= last_moving
+    if first_moving > last_moving:
+        return points
+
+    trimmed = points[first_moving : last_moving + 1]
+
+    # If the result would have fewer than 2 points, return the original
+    if len(trimmed) < 2:
+        return points
+
+    return trimmed
+
+
+# ---------------------------------------------------------------------------
 # DTW
 # ---------------------------------------------------------------------------
 
@@ -205,9 +273,15 @@ class GestureWatcher:
     State machine: IDLE -> TRACKING -> (match attempt) -> COOLDOWN -> IDLE
     """
 
-    def __init__(self, gesture_store: GestureStore, config: MatchingConfig) -> None:
+    def __init__(
+        self,
+        gesture_store: GestureStore,
+        config: MatchingConfig,
+        capture_store: CaptureStore | None = None,
+    ) -> None:
         self._store = gesture_store
         self._config = config
+        self._capture_store = capture_store
         self._state = WatcherState.IDLE
         self._points: list[GesturePoint] = []
         self._last_detection_time: float = 0.0
@@ -275,15 +349,27 @@ class GestureWatcher:
         """Preprocess captured points and match against stored gestures."""
         # Too few points — reject
         if len(self._points) < self._config.min_gesture_points:
-            return MatchResult(
+            result = MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
                 distance=float("inf"),
                 all_scores={},
             )
+            if self._capture_store:
+                self._capture_store.add(self._points, result, 0)
+            return result
 
-        captured = preprocess(self._points, self._config.resample_count)
+        # Dwell trimming — remove near-stationary clusters at start/end
+        if self._config.dwell_trim_enabled:
+            trimmed = trim_dwells(self._points, self._config.dwell_speed_threshold)
+            trimmed_count = len(self._points) - len(trimmed)
+            points_for_matching = trimmed
+        else:
+            trimmed_count = 0
+            points_for_matching = self._points
+
+        captured = preprocess(points_for_matching, self._config.resample_count)
 
         all_scores: dict[str, float] = {}
 
@@ -299,13 +385,16 @@ class GestureWatcher:
             all_scores[gesture_name] = best_dist
 
         if not all_scores:
-            return MatchResult(
+            result = MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
                 distance=float("inf"),
                 all_scores=all_scores,
             )
+            if self._capture_store:
+                self._capture_store.add(self._points, result, trimmed_count)
+            return result
 
         # Sort gestures by distance
         ranked = sorted(all_scores.items(), key=lambda kv: kv[1])
@@ -313,13 +402,16 @@ class GestureWatcher:
 
         # Distance threshold check
         if best_dist > self._config.distance_threshold:
-            return MatchResult(
+            result = MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=0.0,
                 distance=best_dist,
                 all_scores=all_scores,
             )
+            if self._capture_store:
+                self._capture_store.add(self._points, result, trimmed_count)
+            return result
 
         # Compute confidence
         confidence = 1.0 - (best_dist / self._config.distance_threshold)
@@ -327,13 +419,16 @@ class GestureWatcher:
 
         # Minimum confidence check
         if confidence < self._config.min_confidence:
-            return MatchResult(
+            result = MatchResult(
                 matched=False,
                 gesture_name=None,
                 confidence=confidence,
                 distance=best_dist,
                 all_scores=all_scores,
             )
+            if self._capture_store:
+                self._capture_store.add(self._points, result, trimmed_count)
+            return result
 
         # Ambiguity check: reject if 2nd best is within 20% of best
         if len(ranked) >= 2:
@@ -341,32 +436,41 @@ class GestureWatcher:
             if best_dist > 0:
                 ratio = (second_dist - best_dist) / best_dist
                 if ratio < 0.20:
-                    return MatchResult(
+                    result = MatchResult(
                         matched=False,
                         gesture_name=None,
                         confidence=confidence,
                         distance=best_dist,
                         all_scores=all_scores,
                     )
+                    if self._capture_store:
+                        self._capture_store.add(self._points, result, trimmed_count)
+                    return result
             else:
                 # best_dist == 0 — only ambiguous if second is also 0
                 if second_dist == 0:
-                    return MatchResult(
+                    result = MatchResult(
                         matched=False,
                         gesture_name=None,
                         confidence=confidence,
                         distance=best_dist,
                         all_scores=all_scores,
                     )
+                    if self._capture_store:
+                        self._capture_store.add(self._points, result, trimmed_count)
+                    return result
 
         # Match!
-        return MatchResult(
+        result = MatchResult(
             matched=True,
             gesture_name=best_name,
             confidence=confidence,
             distance=best_dist,
             all_scores=all_scores,
         )
+        if self._capture_store:
+            self._capture_store.add(self._points, result, trimmed_count)
+        return result
 
     def invalidate_cache(self, gesture_name: str | None = None) -> None:
         """Clear the preprocessed sample cache.

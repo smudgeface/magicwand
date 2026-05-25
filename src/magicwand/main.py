@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from magicwand.actions import ActionDispatcher
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
+from magicwand.captures import CaptureStore
 from magicwand.config import Config, clear_config_cache, get_config
 from magicwand.detection import Detector
 from magicwand.events import EventBus, EventType
@@ -87,22 +88,25 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
 
     config: Config = get_config(config_path)
 
-    # Resolve gestures directory relative to config file location or CWD.
+    # Resolve directories relative to config file location or CWD.
     if config_path is not None:
-        gestures_dir = Path(config_path).parent / config.gestures.directory
-        log_dir = Path(config_path).parent / config.logging.directory
+        base_dir = Path(config_path).parent
     else:
-        gestures_dir = Path.cwd() / config.gestures.directory
-        log_dir = Path.cwd() / config.logging.directory
+        base_dir = Path.cwd()
+    gestures_dir = base_dir / config.gestures.directory
+    log_dir = base_dir / config.logging.directory
+    captures_dir = base_dir / config.captures.directory
     gestures_dir.mkdir(parents=True, exist_ok=True)
+    captures_dir.mkdir(parents=True, exist_ok=True)
 
     # Build camera objects early so lifespan can close over them.
     camera_source = make_camera_source(config.camera)
     frame_buffer = FrameBuffer()
     detector = Detector(config.detection)
     gesture_store = GestureStore(gestures_dir)
+    capture_store = CaptureStore(captures_dir, config.captures.max_captures)
     recorder = Recorder(config.camera.width, config.camera.height)
-    watcher = GestureWatcher(gesture_store, config.matching)
+    watcher = GestureWatcher(gesture_store, config.matching, capture_store=capture_store)
     gesture_store.on_change = watcher.invalidate_cache
     action_queue: queue.Queue = queue.Queue()
     action_dispatcher = ActionDispatcher()
@@ -132,6 +136,7 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         app.state.camera_thread = camera_thread
         app.state.detector = detector
         app.state.gesture_store = gesture_store
+        app.state.capture_store = capture_store
         app.state.recorder = recorder
         app.state.watcher = watcher
         app.state.action_dispatcher = action_dispatcher

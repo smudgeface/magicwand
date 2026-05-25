@@ -51,6 +51,14 @@ class MatchingConfig:
     cooldown_time: float = 2.0
     min_gesture_points: int = 10
     resample_count: int = 32
+    dwell_speed_threshold: float = 0.05
+    dwell_trim_enabled: bool = True
+
+
+@dataclass
+class CapturesConfig:
+    directory: str = "captures"
+    max_captures: int = 200
 
 
 @dataclass
@@ -81,6 +89,7 @@ class Config:
     detection: DetectionConfig = field(default_factory=DetectionConfig)
     gestures: GesturesConfig = field(default_factory=GesturesConfig)
     matching: MatchingConfig = field(default_factory=MatchingConfig)
+    captures: CapturesConfig = field(default_factory=CapturesConfig)
     homebridge: HomebridgeConfig = field(default_factory=HomebridgeConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
 
@@ -140,6 +149,14 @@ def _load_config(path: Path | None) -> Config:
         cooldown_time=matching_raw.get("cooldown_time", 2.0),
         min_gesture_points=matching_raw.get("min_gesture_points", 10),
         resample_count=matching_raw.get("resample_count", 32),
+        dwell_speed_threshold=matching_raw.get("dwell_speed_threshold", 0.05),
+        dwell_trim_enabled=matching_raw.get("dwell_trim_enabled", True),
+    )
+
+    captures_raw = raw.get("captures", {})
+    captures = CapturesConfig(
+        directory=captures_raw.get("directory", "captures"),
+        max_captures=captures_raw.get("max_captures", 200),
     )
 
     homebridge_raw = raw.get("homebridge", {})
@@ -164,7 +181,7 @@ def _load_config(path: Path | None) -> Config:
         max_files=logging_raw.get("max_files", 5),
     )
 
-    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching, homebridge=homebridge, logging=logging_config)
+    return Config(server=server, camera=camera, detection=detection, gestures=gestures, matching=matching, captures=captures, homebridge=homebridge, logging=logging_config)
 
 
 _cached_config: Config | None = None
