@@ -27,25 +27,58 @@ devices around the house.
 - **Illumination:** Ring of 5 mm 850 nm IR LEDs around the camera
 - **Storage:** 16 GB microSD card
 
-## Software (planned)
+## Software
 
-A web app running on the Pi, intended for use during development and gesture
-authoring:
+A Python web app (FastAPI + OpenCV) running on the Pi, used for both
+development and production:
 
-- Live camera feed with tip-detection overlay
-- Logging and debugging views
-- Gesture training: record a new gesture, name it, associate it with a
-  target URL + JSON payload
-- Gesture playback / test runner
+- Live MJPEG camera feed with tip-detection overlay
+- Gesture training wizard: record samples, view color-coded segmentation
+- Real-time gesture matching via DTW with confidence scoring
+- Action dispatch: fire HTTP requests on gesture match (Homebridge integration)
+- Event log with WebSocket live stream
+- Admin page for tuning all parameters at runtime
+- Capture history with visual debugging of segmentation
+
+### Development mode
+
+During development the app runs on a Mac using the Studio Display webcam
+with a phone flashlight LED as the bright point (`source = "auto"` in
+config.toml). Deploy to the Pi via rsync.
+
+## Architecture
+
+```
+Camera → Detector → GestureWatcher → Action Dispatch
+                        ↓
+              Segmentation pipeline:
+              1. Compute per-point speeds
+              2. Segment at dwells (speed < threshold)
+              3. Merge noise (short slow jitter in motion, short fast jitter in dwell)
+              4. Filter trivial segments (linearity, curvature, duration)
+              5. DTW match surviving candidates against stored gestures
+```
+
+Key design decisions:
+- **Directional gestures:** `rotate_to_indicative_angle` aligns the first
+  point upward, so left-to-right and right-to-left are distinct gestures
+- **Segmentation over trimming:** The system splits captures at dwell points
+  rather than trimming ends, supporting multiple gestures in one capture
+- **Strongest match wins:** When multiple gesture candidates survive filtering,
+  all are matched and the lowest-distance result is used
 
 ## Documentation
 
-- [Implementation plan](docs/implementation-plan.md) — phased build plan with
-  technical details for each component
+- [Implementation plan](docs/implementation-plan.md) — phased build plan
+- [Gesture segmentation spec](docs/gesture-segmentation-spec.md) — segmentation
+  algorithm design and parameters
 
 ## Status
 
-Early — hardware is being assembled and the Pi is being provisioned.
+All 8 implementation phases complete. Core pipeline works end-to-end:
+camera → detect → track → segment → match → fire action. 156 tests passing.
+Currently tuning segmentation parameters and training gestures with real
+hardware.
 
 ## Repository
 

@@ -24,15 +24,20 @@ Raspberry Pi Zero 2 W. Constraints to keep in mind:
 Prefer lightweight tooling. Avoid frameworks that assume 4+ GB RAM or pull
 in a GPU.
 
-## Architecture sketch (subject to change)
+## Architecture
 
-- Camera capture and tip detection: Python, using `picamera2` + OpenCV.
-- Web app: small Python service (FastAPI or similar) serving the live feed,
-  debugging UI, and gesture-training UI.
-- Gesture matching: TBD — likely a simple geometric/DTW approach before
-  reaching for ML.
-- Action dispatch: outbound HTTP POST to a per-gesture URL with a per-gesture
-  JSON body.
+- Camera capture and tip detection: Python, `picamera2` (Pi) or OpenCV webcam (Mac dev)
+- Web app: FastAPI serving live MJPEG feed, training UI, captures, admin
+- Gesture matching: DTW on preprocessed paths (resample → center → scale → rotate)
+- Segmentation: speed-based dwell detection → linearity/curvature filtering
+- Action dispatch: async HTTP via httpx on gesture match
+
+### Segmentation is stable
+The gesture segmentation logic (`segment_at_dwells`, `extract_gesture_candidates`,
+linearity/curvature filters in `matching.py`) has been extensively tuned and
+verified against real captures. **Do not modify without confirming a real,
+observed issue with the user first.** See `docs/gesture-segmentation-spec.md`
+for full documentation of the algorithm and pitfalls.
 
 ## Conventions
 
@@ -62,6 +67,16 @@ Multiple instances cause silent failures (the second binds to nothing and hangs)
 - `docs/implementation-plan.md` — phased build plan. Read this before starting
   work on any phase. Each phase has explicit deliverables, technical notes,
   and test requirements.
+
+## Key files
+
+- `src/magicwand/matching.py` — segmentation + DTW matching engine
+- `src/magicwand/camera.py` — camera thread with pause/resume
+- `src/magicwand/main.py` — FastAPI app factory, startup, port check
+- `src/magicwand/web/routes.py` — all API + page routes
+- `config.toml` — all runtime parameters (detection, matching, camera)
+- `gestures/` — stored gesture JSON files (training data)
+- `captures/history.jsonl` — ring buffer of recent gesture attempts
 
 ## Out of scope (for now)
 
