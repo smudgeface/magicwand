@@ -204,14 +204,16 @@ async def update_detection_settings(request: Request) -> dict:
     app_cfg.detection.min_area = cfg.min_area
     app_cfg.detection.max_area = cfg.max_area
     app_cfg.detection.blur_kernel = cfg.blur_kernel
-    app_cfg.detection.trail_length = cfg.trail_length
+    app_cfg.detection.trail_hold = cfg.trail_hold
+    app_cfg.detection.trail_fade = cfg.trail_fade
     save_config()
     return {
         "threshold": cfg.threshold,
         "min_area": cfg.min_area,
         "max_area": cfg.max_area,
         "blur_kernel": cfg.blur_kernel,
-        "trail_length": cfg.trail_length,
+        "trail_hold": cfg.trail_hold,
+        "trail_fade": cfg.trail_fade,
     }
 
 
@@ -221,13 +223,14 @@ async def detection_status(request: Request) -> dict:
     detector = request.app.state.detector
     return {
         "fps": round(detector.fps, 1),
-        "trail_length": len(detector.trail),
+        "trail_points": len(detector.trail),
         "config": {
             "threshold": detector._config.threshold,
             "min_area": detector._config.min_area,
             "max_area": detector._config.max_area,
             "blur_kernel": detector._config.blur_kernel,
-            "trail_length": detector._config.trail_length,
+            "trail_hold": detector._config.trail_hold,
+            "trail_fade": detector._config.trail_fade,
         },
     }
 
@@ -481,15 +484,42 @@ async def clear_action(request: Request, name: str) -> dict:
 @router.post("/api/gestures/{name}/action/test")
 async def test_action(request: Request, name: str) -> dict:
     """Fire the gesture's action immediately (for testing)."""
+    import time as _time
     store = request.app.state.gesture_store
     g = store.get(name)
     if g is None:
         return JSONResponse({"error": "gesture not found"}, status_code=404)
     if g.action is None:
         return JSONResponse({"error": "no action configured"}, status_code=400)
+
+    if g.action.get("type") == "homebridge":
+        hb = request.app.state.homebridge
+        accessory_id = g.action["accessory_id"]
+        action = g.action.get("action", "toggle")
+        t0 = _time.monotonic()
+        if action == "toggle":
+            result = await hb.toggle(accessory_id)
+        elif action == "on":
+            await hb.set_characteristic(accessory_id, "On", 1)
+            result = True
+        elif action == "off":
+            await hb.set_characteristic(accessory_id, "On", 0)
+            result = False
+        else:
+            result = None
+        latency = (_time.monotonic() - t0) * 1000
+        return {
+            "success": result is not None,
+            "action": action,
+            "result": result,
+            "latency_ms": round(latency, 1),
+            "error": None if result is not None else "homebridge request failed",
+        }
+
     from magicwand.actions import ActionConfig
     dispatcher = request.app.state.action_dispatcher
-    config = ActionConfig(**g.action)
+    filtered = {k: v for k, v in g.action.items() if k in ActionConfig.__dataclass_fields__}
+    config = ActionConfig(**filtered)
     result = await dispatcher.fire(config)
     return {
         "success": result.success,
@@ -571,19 +601,51 @@ async def update_captures_settings(request: Request) -> dict:
     return {"max_captures": store._max}
 
 
-@router.get("/api/homebridge/presets")
-async def homebridge_presets(request: Request) -> list[dict]:
-    """Return available Homebridge presets with host/port filled in."""
-    from magicwand.config import get_config
+@router.get("/api/homebridge/status")
+async def homebridge_status(request: Request) -> dict:
+    """Return Homebridge connection state."""
+    hb = request.app.state.homebridge
+    return {
+        "configured": hb.configured,
+        "connected": hb.connected,
+        "host": hb._host,
+        "port": hb._port,
+    }
+
+
+@router.post("/api/homebridge/connect")
+async def homebridge_connect(request: Request) -> dict:
+    """Test Homebridge connection (authenticate)."""
+    hb = request.app.state.homebridge
+    if not hb.configured:
+        return JSONResponse({"error": "Homebridge host not configured"}, status_code=400)
+    success = await hb.connect()
+    return {"connected": success}
+
+
+@router.get("/api/homebridge/accessories")
+async def homebridge_accessories(request: Request) -> list[dict]:
+    """List discovered Homebridge accessories (lights/switches)."""
+    hb = request.app.state.homebridge
+    return await hb.get_accessories()
+
+
+@router.put("/api/settings/homebridge")
+async def update_homebridge_settings(request: Request) -> dict:
+    """Update Homebridge connection settings and persist to config.toml."""
+    body = await request.json()
+    hb = request.app.state.homebridge
+    host = body.get("host", hb._host)
+    port = int(body.get("port", hb._port))
+    username = body.get("username", hb._username)
+    password = body.get("password", hb._password)
+    hb.update_config(host, port, username, password)
+
+    from magicwand.config import get_config, save_config
     cfg = get_config()
-    hb = cfg.homebridge
-    result = []
-    for p in hb.presets:
-        result.append({
-            "name": p.name,
-            "method": p.method,
-            "url_template": p.url_template.format(
-                host=hb.host, port=hb.port, accessory_id="{accessory_id}"
-            ),
-        })
-    return result
+    cfg.homebridge.host = host
+    cfg.homebridge.port = port
+    cfg.homebridge.username = username
+    cfg.homebridge.password = password
+    save_config()
+    return {"host": host, "port": port, "connected": False}

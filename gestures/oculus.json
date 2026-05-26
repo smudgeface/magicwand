@@ -549,5 +549,10 @@
       }
     ]
   ],
-  "action": null
+  "action": {
+    "type": "homebridge",
+    "accessory_id": "3f471236cf4fcfb5458285e80a152ed1f7ca4683b3bda5c2e714eb70105f1d36",
+    "accessory_name": "Front: House Lights",
+    "action": "off"
+  }
 }

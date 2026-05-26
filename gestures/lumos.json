@@ -1248,5 +1248,10 @@
       }
     ]
   ],
-  "action": null
+  "action": {
+    "type": "homebridge",
+    "accessory_id": "e5d0a8475851b4390d5929dbe5832570d906781df5390a2abdebd7403129b804",
+    "accessory_name": "Scene: Night Mode",
+    "action": "toggle"
+  }
 }

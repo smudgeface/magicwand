@@ -110,97 +110,14 @@ async def test_test_action_no_action_configured(client: httpx.AsyncClient) -> No
 
 
 # ---------------------------------------------------------------------------
-# Homebridge presets
+# Homebridge status
 # ---------------------------------------------------------------------------
 
-_CONFIG_WITH_PRESETS = """\
-[server]
-host = "127.0.0.1"
-port = 8000
 
-[camera]
-width = 640
-height = 480
-fps = 30
-source = "mock"
-
-[camera.mock]
-dot_speed = 2.0
-
-[homebridge]
-host = "homebridge.local"
-port = 8581
-
-[[homebridge.presets]]
-name = "Switch On"
-method = "PUT"
-url_template = "http://{host}:{port}/api/accessories/{accessory_id}"
-
-[[homebridge.presets]]
-name = "Switch Off"
-method = "PUT"
-url_template = "http://{host}:{port}/api/accessories/{accessory_id}"
-"""
-
-
-@pytest.fixture
-def tmp_config_with_presets(tmp_path: Path) -> Path:
-    """Write a config.toml that includes Homebridge presets to a temp dir."""
-    config_file = tmp_path / "config.toml"
-    config_file.write_text(_CONFIG_WITH_PRESETS)
-    return config_file
-
-
-@pytest.fixture
-def app_with_presets(tmp_config_with_presets: Path):
-    """FastAPI app configured with Homebridge presets."""
-    clear_config_cache()
-    from magicwand.main import create_app
-    a = create_app(config_path=tmp_config_with_presets)
-    yield a
-    clear_config_cache()
-
-
-@pytest_asyncio.fixture
-async def client_with_presets(app_with_presets):
-    """AsyncClient with lifespan for the presets-enabled app."""
-    async with LifespanManager(app_with_presets):
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app_with_presets),
-            base_url="http://testserver",
-        ) as c:
-            yield c
-
-
-async def test_homebridge_presets(client_with_presets: httpx.AsyncClient) -> None:
-    """GET /api/homebridge/presets returns a list of presets with required keys."""
-    response = await client_with_presets.get("/api/homebridge/presets")
+async def test_homebridge_status(client: httpx.AsyncClient) -> None:
+    """GET /api/homebridge/status returns connection info."""
+    response = await client.get("/api/homebridge/status")
     assert response.status_code == 200
-    presets = response.json()
-
-    assert isinstance(presets, list)
-    assert len(presets) >= 1
-
-    # Verify each preset has the required shape.
-    for preset in presets:
-        assert "name" in preset
-        assert "method" in preset
-        assert "url_template" in preset
-
-    # Verify our known preset names are present.
-    names = [p["name"] for p in presets]
-    assert "Switch On" in names
-    assert "Switch Off" in names
-
-    # url_template should have host/port filled in but {accessory_id} still as a placeholder.
-    switch_on = next(p for p in presets if p["name"] == "Switch On")
-    assert "homebridge.local" in switch_on["url_template"]
-    assert "8581" in switch_on["url_template"]
-    assert "{accessory_id}" in switch_on["url_template"]
-
-
-async def test_homebridge_presets_empty(client: httpx.AsyncClient) -> None:
-    """GET /api/homebridge/presets returns an empty list when no presets are configured."""
-    response = await client.get("/api/homebridge/presets")
-    assert response.status_code == 200
-    assert response.json() == []
+    data = response.json()
+    assert "configured" in data
+    assert "connected" in data

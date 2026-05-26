@@ -37,7 +37,8 @@ class DetectionConfig:
     min_area: int = 20
     max_area: int = 5000
     blur_kernel: int = 5
-    trail_length: int = 50
+    trail_hold: float = 5.0
+    trail_fade: float = 5.0
 
 
 @dataclass
@@ -67,17 +68,11 @@ class CapturesConfig:
 
 
 @dataclass
-class HomebridgePreset:
-    name: str = ""
-    method: str = "GET"
-    url_template: str = ""
-
-
-@dataclass
 class HomebridgeConfig:
-    host: str = "homebridge.local"
+    host: str = ""
     port: int = 8581
-    presets: list[HomebridgePreset] = field(default_factory=list)
+    username: str = ""
+    password: str = ""
 
 
 @dataclass
@@ -141,7 +136,8 @@ def _load_config(path: Path | None) -> Config:
         min_area=detection_raw.get("min_area", 20),
         max_area=detection_raw.get("max_area", 5000),
         blur_kernel=detection_raw.get("blur_kernel", 5),
-        trail_length=detection_raw.get("trail_length", 50),
+        trail_hold=detection_raw.get("trail_hold", 5.0),
+        trail_fade=detection_raw.get("trail_fade", 5.0),
     )
 
     gestures_raw = raw.get("gestures", {})
@@ -171,18 +167,11 @@ def _load_config(path: Path | None) -> Config:
     )
 
     homebridge_raw = raw.get("homebridge", {})
-    homebridge_presets = [
-        HomebridgePreset(
-            name=p.get("name", ""),
-            method=p.get("method", "GET"),
-            url_template=p.get("url_template", ""),
-        )
-        for p in homebridge_raw.get("presets", [])
-    ]
     homebridge = HomebridgeConfig(
-        host=homebridge_raw.get("host", "homebridge.local"),
+        host=homebridge_raw.get("host", ""),
         port=homebridge_raw.get("port", 8581),
-        presets=homebridge_presets,
+        username=homebridge_raw.get("username", ""),
+        password=homebridge_raw.get("password", ""),
     )
 
     logging_raw = raw.get("logging", {})
@@ -263,7 +252,8 @@ def _write_config(config: Config, path: Path) -> None:
     lines.append(f"min_area = {config.detection.min_area}")
     lines.append(f"max_area = {config.detection.max_area}")
     lines.append(f"blur_kernel = {config.detection.blur_kernel}")
-    lines.append(f"trail_length = {config.detection.trail_length}")
+    lines.append(f"trail_hold = {config.detection.trail_hold}")
+    lines.append(f"trail_fade = {config.detection.trail_fade}")
     lines.append("")
     lines.append("[gestures]")
     lines.append(f'directory = "{config.gestures.directory}"')
@@ -288,12 +278,8 @@ def _write_config(config: Config, path: Path) -> None:
     lines.append("[homebridge]")
     lines.append(f'host = "{config.homebridge.host}"')
     lines.append(f"port = {config.homebridge.port}")
-    for preset in config.homebridge.presets:
-        lines.append("")
-        lines.append("[[homebridge.presets]]")
-        lines.append(f'name = "{preset.name}"')
-        lines.append(f'method = "{preset.method}"')
-        lines.append(f'url_template = "{preset.url_template}"')
+    lines.append(f'username = "{config.homebridge.username}"')
+    lines.append(f'password = "{config.homebridge.password}"')
     lines.append("")
     lines.append("[logging]")
     lines.append(f'directory = "{config.logging.directory}"')

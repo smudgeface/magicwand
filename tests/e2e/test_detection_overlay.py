@@ -14,23 +14,23 @@ from magicwand.config import clear_config_cache
 # ---------------------------------------------------------------------------
 
 async def test_detection_settings_get(client: httpx.AsyncClient) -> None:
-    """GET /api/detection/status returns fps, trail_length, and config keys."""
+    """GET /api/detection/status returns fps, trail_points, and config keys."""
     response = await client.get("/api/detection/status")
 
     assert response.status_code == 200
     body = response.json()
 
     assert "fps" in body, f"Missing 'fps' key in response: {body}"
-    assert "trail_length" in body, f"Missing 'trail_length' key in response: {body}"
+    assert "trail_points" in body, f"Missing 'trail_points' key in response: {body}"
     assert "config" in body, f"Missing 'config' key in response: {body}"
 
-    # Sanity-check the nested config object
     cfg = body["config"]
     assert "threshold" in cfg
     assert "min_area" in cfg
     assert "max_area" in cfg
     assert "blur_kernel" in cfg
-    assert "trail_length" in cfg
+    assert "trail_hold" in cfg
+    assert "trail_fade" in cfg
 
 
 # ---------------------------------------------------------------------------

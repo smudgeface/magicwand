@@ -85,8 +85,10 @@
       case 'gesture_recognized':
         return `${d.gesture_name} (${(d.confidence * 100).toFixed(0)}%)`;
       case 'action_fired':
+        if (d.accessory) return `${d.accessory} → ${d.action} (${d.latency_ms}ms)`;
         return `${d.url} → ${d.status_code} (${d.latency_ms}ms)`;
       case 'action_failed':
+        if (d.accessory) return `${d.accessory} — ${d.error}`;
         return `${d.url} — ${d.error}`;
       case 'gesture_rejected':
         return d.reason;

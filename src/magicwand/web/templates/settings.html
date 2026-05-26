@@ -37,8 +37,12 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Trail Length <button class="tip-btn" data-tip="Number of recent positions shown in the trail overlay on the feed. Visual only — doesn't affect detection or matching.">?</button></label>
-        <input type="number" id="det-trail" class="input" value="" min="5" max="200">
+        <label>Trail Hold (s) <button class="tip-btn" data-tip="Seconds the trail stays fully visible before fading begins. Visual only — doesn't affect detection or matching.">?</button></label>
+        <input type="number" id="det-trail-hold" class="input" value="" min="0" max="30" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Trail Fade (s) <button class="tip-btn" data-tip="Seconds over which the trail fades from full brightness to invisible, after the hold period. Each point fades independently based on its own age.">?</button></label>
+        <input type="number" id="det-trail-fade" class="input" value="" min="0" max="30" step="0.5">
       </div>
     </div>
     <button id="btn-apply-detection" class="btn btn-primary">Apply</button>
@@ -101,6 +105,34 @@
 
     <button id="btn-apply-matching" class="btn btn-primary">Apply</button>
     <span id="match-status" class="setting-status"></span>
+  </section>
+
+  <!-- Homebridge -->
+  <section class="card">
+    <h3>Homebridge</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Host <button class="tip-btn" data-tip="IP address or hostname of your Homebridge instance.">?</button></label>
+        <input type="text" id="hb-host" class="input" value="" placeholder="192.168.20.4">
+      </div>
+      <div class="form-group">
+        <label>Port <button class="tip-btn" data-tip="Port for the Homebridge Config UI (default 8581).">?</button></label>
+        <input type="number" id="hb-port" class="input" value="" min="1" max="65535">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Username <button class="tip-btn" data-tip="Leave empty if authentication is disabled on your Homebridge instance.">?</button></label>
+        <input type="text" id="hb-username" class="input" value="" placeholder="(optional)">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="hb-password" class="input" value="" placeholder="(optional)">
+      </div>
+    </div>
+    <button id="btn-save-hb" class="btn btn-primary">Save</button>
+    <button id="btn-test-hb" class="btn btn-secondary">Test Connection</button>
+    <span id="hb-status" class="setting-status"></span>
   </section>
 
   <!-- System info -->

@@ -4,7 +4,7 @@
     loadSystemInfo();
     setupDetectionForm();
     setupMatchingForm();
-    // Refresh system info every 10s
+    setupHomebridgeForm();
     setInterval(loadSystemInfo, 10000);
   });
 
@@ -17,7 +17,8 @@
       document.getElementById('det-min-area').value = cfg.min_area;
       document.getElementById('det-max-area').value = cfg.max_area;
       document.getElementById('det-blur').value = cfg.blur_kernel;
-      document.getElementById('det-trail').value = cfg.trail_length;
+      document.getElementById('det-trail-hold').value = cfg.trail_hold;
+      document.getElementById('det-trail-fade').value = cfg.trail_fade;
     } catch (e) {}
 
     try {
@@ -63,7 +64,8 @@
         min_area: parseInt(document.getElementById('det-min-area').value),
         max_area: parseInt(document.getElementById('det-max-area').value),
         blur_kernel: parseInt(document.getElementById('det-blur').value),
-        trail_length: parseInt(document.getElementById('det-trail').value),
+        trail_hold: parseFloat(document.getElementById('det-trail-hold').value),
+        trail_fade: parseFloat(document.getElementById('det-trail-fade').value),
       };
       try {
         await fetch('/api/settings/detection', {
@@ -101,6 +103,44 @@
         showStatus('match-status', 'Applied', true);
       } catch (e) {
         showStatus('match-status', 'Error', false);
+      }
+    };
+  }
+
+  async function setupHomebridgeForm() {
+    try {
+      const status = await fetch('/api/homebridge/status').then(r => r.json());
+      document.getElementById('hb-host').value = status.host || '';
+      document.getElementById('hb-port').value = status.port || 8581;
+      showStatus('hb-status', status.connected ? 'Connected' : (status.configured ? 'Not connected' : ''), status.connected);
+    } catch (e) {}
+
+    document.getElementById('btn-save-hb').onclick = async () => {
+      const body = {
+        host: document.getElementById('hb-host').value,
+        port: parseInt(document.getElementById('hb-port').value),
+        username: document.getElementById('hb-username').value,
+        password: document.getElementById('hb-password').value,
+      };
+      try {
+        await fetch('/api/settings/homebridge', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        showStatus('hb-status', 'Saved', true);
+      } catch (e) {
+        showStatus('hb-status', 'Error', false);
+      }
+    };
+
+    document.getElementById('btn-test-hb').onclick = async () => {
+      showStatus('hb-status', 'Connecting...', true);
+      try {
+        const result = await fetch('/api/homebridge/connect', { method: 'POST' }).then(r => r.json());
+        showStatus('hb-status', result.connected ? 'Connected' : 'Failed', result.connected);
+      } catch (e) {
+        showStatus('hb-status', 'Error', false);
       }
     };
   }
