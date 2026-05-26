@@ -43,6 +43,21 @@ development and production:
 - Capture history with visual debugging of segmentation
 - Camera pause/resume from the feed page for development
 
+### Running the app
+
+```bash
+cd /Users/jordan/Development/Personal/magicwand
+source .venv/bin/activate
+python -m magicwand.main
+```
+
+The web UI is at `http://localhost:8000`. The app will exit with a clear
+error if port 8000 is already in use. To kill a stale instance first:
+
+```bash
+kill $(lsof -ti :8000) 2>/dev/null
+```
+
 ### Development mode
 
 During development the app runs on a Mac using the Studio Display webcam
