@@ -14,10 +14,11 @@ that's easy to track frame-to-frame. The resulting motion path is a *gesture*,
 which can be matched against a library of trained gestures and mapped to an
 action.
 
-In this project, actions are HTTP POSTs to arbitrary URLs with a JSON payload.
-That makes integration with home automation trivial — for our setup, gestures
-will hit [Homebridge](https://homebridge.io) webhooks to control HomeKit
-devices around the house.
+In this project, recognized gestures trigger actions on
+[Homebridge](https://homebridge.io)-managed accessories via its REST API —
+toggling lights, activating scenes (via dummy switches), or controlling any
+HomeKit device exposed through Homebridge. A custom HTTP fallback supports
+arbitrary URLs for non-Homebridge integrations.
 
 ## Hardware
 
@@ -32,13 +33,15 @@ devices around the house.
 A Python web app (FastAPI + OpenCV) running on the Pi, used for both
 development and production:
 
-- Live MJPEG camera feed with tip-detection overlay
+- Live MJPEG camera feed with tip-detection overlay and time-fading trail
 - Gesture training wizard: record samples, view color-coded segmentation
 - Real-time gesture matching via DTW with confidence scoring
-- Action dispatch: fire HTTP requests on gesture match (Homebridge integration)
+- Homebridge integration: auto-discover accessories, assign to gestures via
+  dropdown (toggle/on/off), with custom HTTP fallback
 - Event log with WebSocket live stream
-- Admin page for tuning all parameters at runtime
+- Admin page for tuning detection, matching, and Homebridge settings
 - Capture history with visual debugging of segmentation
+- Camera pause/resume from the feed page for development
 
 ### Development mode
 
@@ -49,14 +52,14 @@ config.toml). Deploy to the Pi via rsync.
 ## Architecture
 
 ```
-Camera → Detector → GestureWatcher → Action Dispatch
-                        ↓
-              Segmentation pipeline:
-              1. Compute per-point speeds
-              2. Segment at dwells (speed < threshold)
-              3. Merge noise (short slow jitter in motion, short fast jitter in dwell)
-              4. Filter trivial segments (linearity, curvature, duration)
-              5. DTW match surviving candidates against stored gestures
+Camera → Detector → GestureWatcher → Action Dispatch → Homebridge API
+                        ↓                                  ↓
+              Segmentation pipeline:              Toggle lights/switches
+              1. Compute per-point speeds         or fire custom HTTP
+              2. Segment at dwells
+              3. Merge noise
+              4. Filter trivial segments
+              5. DTW match candidates
 ```
 
 Key design decisions:
@@ -66,19 +69,24 @@ Key design decisions:
   rather than trimming ends, supporting multiple gestures in one capture
 - **Strongest match wins:** When multiple gesture candidates survive filtering,
   all are matched and the lowest-distance result is used
+- **Homebridge via Config UI X API:** Authentication (noauth or login),
+  accessory discovery, and control via the built-in REST API — no extra
+  plugins required. Dummy switches can trigger HomeKit scenes via automations
 
 ## Documentation
 
 - [Implementation plan](docs/implementation-plan.md) — phased build plan
 - [Gesture segmentation spec](docs/gesture-segmentation-spec.md) — segmentation
   algorithm design and parameters
+- [Homebridge integration](docs/homebridge-integration.md) — API client,
+  action format, and scene triggering via dummy switches
 
 ## Status
 
-All 8 implementation phases complete. Core pipeline works end-to-end:
-camera → detect → track → segment → match → fire action. 156 tests passing.
-Currently tuning segmentation parameters and training gestures with real
-hardware.
+All 8 implementation phases complete plus Homebridge integration. Core
+pipeline works end-to-end: camera → detect → track → segment → match →
+toggle Homebridge accessory. 155 tests passing. Actively training gestures
+and mapping them to HomeKit scenes.
 
 ## Repository
 
