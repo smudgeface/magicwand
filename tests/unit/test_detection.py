@@ -42,7 +42,8 @@ def _default_config(**overrides) -> DetectionConfig:
         min_area=20,
         max_area=5000,
         blur_kernel=5,
-        trail_length=50,
+        trail_hold=5.0,
+        trail_fade=5.0,
     )
     for key, value in overrides.items():
         setattr(cfg, key, value)
@@ -137,16 +138,16 @@ def test_trail_accumulates() -> None:
     assert len(detector.trail) == 5
 
 
-def test_trail_max_length() -> None:
-    """trail_length=3 caps the trail at 3 points even after 5 frames."""
-    detector = Detector(_default_config(trail_length=3))
+def test_trail_grows_with_detections() -> None:
+    """Trail accumulates points from consecutive detections."""
+    detector = Detector(_default_config())
     positions = [(100, 100), (150, 110), (200, 120), (250, 130), (300, 140)]
 
     for cx, cy in positions:
         frame = _frame_with_dot(cx=cx, cy=cy, radius=10)
         detector.process(frame)
 
-    assert len(detector.trail) == 3
+    assert len(detector.trail) == 5
 
 
 # ---------------------------------------------------------------------------

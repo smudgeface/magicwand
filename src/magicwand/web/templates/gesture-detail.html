@@ -24,34 +24,57 @@
   <!-- Action section -->
   <section class="card">
     <h3>Action</h3>
-    <div class="form-group">
-      <label>Preset</label>
-      <select id="preset-select" class="input">
-        <option value="">Custom...</option>
-      </select>
+
+    <!-- Homebridge action -->
+    <div id="hb-action-section">
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>Homebridge Accessory</label>
+          <select id="hb-accessory" class="input">
+            <option value="">Loading accessories...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Action</label>
+          <select id="hb-action" class="input">
+            <option value="toggle">Toggle</option>
+            <option value="on">Turn On</option>
+            <option value="off">Turn Off</option>
+          </select>
+        </div>
+      </div>
+      <div id="hb-not-connected" style="display:none; color:#ef4444; font-size:0.85rem; margin-bottom:0.5rem;">
+        Homebridge not configured. <a href="/admin" style="color:#818cf8;">Set up in Admin</a>
+      </div>
     </div>
-    <div class="form-group">
-      <label>URL</label>
-      <input type="text" id="action-url" class="input" placeholder="http://homebridge.local:8581/...">
-    </div>
-    <div class="form-row">
+
+    <!-- Custom HTTP (collapsible) -->
+    <details id="http-action-section" class="http-action-details">
+      <summary style="color:#8888aa; cursor:pointer; margin-bottom:0.75rem;">Custom HTTP action</summary>
       <div class="form-group">
-        <label>Method</label>
-        <select id="action-method" class="input">
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-        </select>
+        <label>URL</label>
+        <input type="text" id="action-url" class="input" placeholder="http://...">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Method</label>
+          <select id="action-method" class="input">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Timeout (s)</label>
+          <input type="number" id="action-timeout" class="input" value="5" min="1" max="30" step="0.5">
+        </div>
       </div>
       <div class="form-group">
-        <label>Timeout (s)</label>
-        <input type="number" id="action-timeout" class="input" value="5" min="1" max="30" step="0.5">
+        <label>Body (JSON)</label>
+        <textarea id="action-body" class="input textarea" placeholder='{"key": "value"}'></textarea>
       </div>
-    </div>
-    <div class="form-group">
-      <label>Body (JSON)</label>
-      <textarea id="action-body" class="input textarea" placeholder='{"key": "value"}'></textarea>
-    </div>
+    </details>
+
     <div class="action-buttons">
       <button id="btn-save-action" class="btn btn-primary">Save Action</button>
       <button id="btn-test-action" class="btn btn-secondary">Test</button>

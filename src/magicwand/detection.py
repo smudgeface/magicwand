@@ -49,7 +49,7 @@ class Detector:
 
     def __init__(self, config: DetectionConfig) -> None:
         self._config = config
-        self._trail: deque[TrailPoint] = deque(maxlen=config.trail_length)
+        self._trail: list[TrailPoint] = []
         self._fps_counter = FPSCounter()
 
     def process(self, frame: np.ndarray) -> tuple[np.ndarray, DetectionResult]:
@@ -116,6 +116,11 @@ class Detector:
                 contour_area=0.0,
             )
 
+        # Prune trail points past hold + fade lifetime
+        max_age = self._config.trail_hold + self._config.trail_fade
+        now = time.monotonic()
+        self._trail = [p for p in self._trail if (now - p.timestamp) < max_age]
+
         # Render overlay
         self._render_overlay(output, result)
 
@@ -136,11 +141,6 @@ class Detector:
         for key, value in kwargs.items():
             if hasattr(self._config, key):
                 setattr(self._config, key, value)
-        # Update trail deque maxlen if trail_length changed
-        if "trail_length" in kwargs:
-            new_len = self._config.trail_length
-            old_points = list(self._trail)
-            self._trail = deque(old_points[-new_len:], maxlen=new_len)
 
     def _render_overlay(
         self, frame: np.ndarray, result: DetectionResult
@@ -152,14 +152,23 @@ class Detector:
         if result.detected and result.position is not None:
             cv2.circle(frame, result.position, 6, (0, 255, 0), -1)
 
-        # Trail: line segments with color fading from dim to bright green
-        trail_points = list(self._trail)
+        # Trail: line segments with per-point age-based fading
+        # Fully visible for _trail_hold seconds, then fades over _trail_fade seconds
+        trail_points = self._trail
+        now = time.monotonic()
         n = len(trail_points)
         if n >= 2:
             for i in range(n - 1):
-                # Interpolate color from (0, 60, 0) at oldest to (0, 255, 0) at newest
-                t = i / (n - 1)
-                green_val = int(60 + t * (255 - 60))
+                age = now - trail_points[i].timestamp
+                if age < self._config.trail_hold:
+                    alpha = 1.0
+                elif self._config.trail_fade > 0:
+                    alpha = 1.0 - (age - self._config.trail_hold) / self._config.trail_fade
+                else:
+                    alpha = 0.0
+                green_val = int(255 * max(0.0, alpha))
+                if green_val < 10:
+                    continue
                 color = (0, green_val, 0)
                 pt1 = (trail_points[i].x, trail_points[i].y)
                 pt2 = (trail_points[i + 1].x, trail_points[i + 1].y)

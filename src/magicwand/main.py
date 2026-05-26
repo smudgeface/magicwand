@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from magicwand.actions import ActionDispatcher
 from magicwand.camera import CameraThread, FrameBuffer, make_camera_source
 from magicwand.captures import CaptureStore
+from magicwand.homebridge import HomebridgeClient
 from magicwand.config import Config, clear_config_cache, get_config
 from magicwand.detection import Detector
 from magicwand.events import EventBus, EventType
@@ -33,46 +34,114 @@ logger = logging.getLogger(__name__)
 
 async def _action_worker(
     dispatcher: ActionDispatcher,
+    homebridge: HomebridgeClient,
     action_queue: queue.Queue,
     stop_event: asyncio.Event,
     event_bus: EventBus | None = None,
 ) -> None:
-    """Background task that consumes the action queue and dispatches HTTP requests."""
+    """Background task that consumes the action queue and dispatches actions."""
     loop = asyncio.get_event_loop()
     while not stop_event.is_set():
         try:
             action_dict = await loop.run_in_executor(None, action_queue.get, True, 0.5)
-            from magicwand.actions import ActionConfig
-            config = ActionConfig(**action_dict)
-            result = await dispatcher.fire(config)
-            logger.info(
-                "Action fired: %s → %s (%.0fms)",
-                config.url,
-                result.status_code or "error",
-                result.latency_ms,
-            )
-            if event_bus is not None:
-                gesture_name = action_dict.get("gesture_name", "")
-                if result.success:
-                    event_bus.emit(EventType.ACTION_FIRED, {
-                        "gesture_name": gesture_name,
-                        "url": config.url,
-                        "status_code": result.status_code,
-                        "latency_ms": round(result.latency_ms, 1),
-                    })
-                else:
-                    event_bus.emit(EventType.ACTION_FAILED, {
-                        "gesture_name": gesture_name,
-                        "url": config.url,
-                        "error": result.error or "unknown",
-                        "latency_ms": round(result.latency_ms, 1),
-                    })
+            gesture_name = action_dict.get("gesture_name", "")
+
+            if action_dict.get("type") == "homebridge":
+                await _fire_homebridge_action(
+                    homebridge, action_dict, gesture_name, event_bus
+                )
+            else:
+                await _fire_http_action(
+                    dispatcher, action_dict, gesture_name, event_bus
+                )
         except queue.Empty:
             continue
         except asyncio.CancelledError:
             break
         except Exception:
             logger.exception("Action worker error")
+
+
+async def _fire_homebridge_action(
+    client: HomebridgeClient,
+    action_dict: dict,
+    gesture_name: str,
+    event_bus: EventBus | None,
+) -> None:
+    accessory_id = action_dict["accessory_id"]
+    accessory_name = action_dict.get("accessory_name", accessory_id)
+    action = action_dict.get("action", "toggle")
+    t0 = __import__("time").monotonic()
+
+    if action == "toggle":
+        result = await client.toggle(accessory_id)
+    elif action == "on":
+        await client.set_characteristic(accessory_id, "On", 1)
+        result = True
+    elif action == "off":
+        await client.set_characteristic(accessory_id, "On", 0)
+        result = False
+    else:
+        result = None
+
+    latency = (__import__("time").monotonic() - t0) * 1000
+    success = result is not None
+
+    if success:
+        logger.info("Homebridge: %s → %s (%.0fms)", accessory_name, action, latency)
+    else:
+        logger.warning("Homebridge: %s → FAILED (%.0fms)", accessory_name, latency)
+
+    if event_bus:
+        if success:
+            event_bus.emit(EventType.ACTION_FIRED, {
+                "gesture_name": gesture_name,
+                "accessory": accessory_name,
+                "action": action,
+                "result": result,
+                "latency_ms": round(latency, 1),
+            })
+        else:
+            event_bus.emit(EventType.ACTION_FAILED, {
+                "gesture_name": gesture_name,
+                "accessory": accessory_name,
+                "action": action,
+                "error": "homebridge request failed",
+                "latency_ms": round(latency, 1),
+            })
+
+
+async def _fire_http_action(
+    dispatcher: ActionDispatcher,
+    action_dict: dict,
+    gesture_name: str,
+    event_bus: EventBus | None,
+) -> None:
+    from magicwand.actions import ActionConfig
+    filtered = {k: v for k, v in action_dict.items() if k in ActionConfig.__dataclass_fields__}
+    config = ActionConfig(**filtered)
+    result = await dispatcher.fire(config)
+    logger.info(
+        "Action fired: %s → %s (%.0fms)",
+        config.url,
+        result.status_code or "error",
+        result.latency_ms,
+    )
+    if event_bus:
+        if result.success:
+            event_bus.emit(EventType.ACTION_FIRED, {
+                "gesture_name": gesture_name,
+                "url": config.url,
+                "status_code": result.status_code,
+                "latency_ms": round(result.latency_ms, 1),
+            })
+        else:
+            event_bus.emit(EventType.ACTION_FAILED, {
+                "gesture_name": gesture_name,
+                "url": config.url,
+                "error": result.error or "unknown",
+                "latency_ms": round(result.latency_ms, 1),
+            })
 
 _STATIC_DIR = Path(__file__).parent / "web" / "static"
 
@@ -112,6 +181,12 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
     gesture_store.on_change = watcher.invalidate_cache
     action_queue: queue.Queue = queue.Queue()
     action_dispatcher = ActionDispatcher()
+    homebridge_client = HomebridgeClient(
+        host=config.homebridge.host,
+        port=config.homebridge.port,
+        username=config.homebridge.username,
+        password=config.homebridge.password,
+    )
     event_bus = EventBus(
         log_dir=log_dir,
         max_file_size=config.logging.max_file_size,
@@ -142,11 +217,15 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         app.state.recorder = recorder
         app.state.watcher = watcher
         app.state.action_dispatcher = action_dispatcher
+        app.state.homebridge = homebridge_client
         app.state.event_bus = event_bus
         await action_dispatcher.start()
+        await homebridge_client.start()
+        if homebridge_client.configured:
+            await homebridge_client.connect()
         stop_event = asyncio.Event()
         worker_task = asyncio.create_task(
-            _action_worker(action_dispatcher, action_queue, stop_event, event_bus)
+            _action_worker(action_dispatcher, homebridge_client, action_queue, stop_event, event_bus)
         )
         camera_thread.start()
         logger.info(
@@ -168,6 +247,7 @@ def create_app(config_path: Path | str | None = None) -> FastAPI:
         except asyncio.CancelledError:
             pass
         await action_dispatcher.stop()
+        await homebridge_client.stop()
         camera_thread.stop()
         camera_thread.join(timeout=5.0)
         event_bus.close()
