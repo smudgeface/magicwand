@@ -140,30 +140,25 @@ against stored samples.
 
 ## Phase 5: Actions + Homebridge integration
 
-**Goal:** Recognized gestures fire HTTP POSTs to configured URLs.
+**Goal:** Recognized gestures control HomeKit devices via Homebridge.
 
-### Deliverables
-- Action model: `{url, method, headers, body, timeout}`
-- Action dispatch: async HTTP POST via `httpx` when gesture matched
-- Per-gesture action config stored in gesture JSON file
-- API endpoints:
-  - `PUT /api/gestures/{name}/action` — set/update action
-  - `POST /api/gestures/{name}/action/test` — fire the action immediately
-- Homebridge presets:
-  - Switch on: `{"url": "http://<host>:<port>/?accessoryId=<id>&state=true"}`
-  - Switch off: same with `state=false`
-  - Scene trigger: `{"url": "http://<host>:<port>/?accessoryId=<id>"}`
-  - Presets stored in `config.toml` under `[homebridge]` section
-- Web UI: action config form per gesture with URL, method, headers, JSON body
-  fields + preset dropdown + "Test" button
-- Response logging (status code, latency) attached to event log entry
-- Unit tests: action dispatch (mock HTTP), preset expansion
-- E2E test: configure action → test button → verify POST sent (mock server)
+### Deliverables (updated — reflects actual implementation)
+- `HomebridgeClient` (`homebridge.py`): auth (noauth + login), accessory
+  discovery, characteristic control via Config UI X REST API
+- Typed action model: `{type: "homebridge", accessory_id, action}` for
+  Homebridge, `{type: "http", url, method, body}` for custom HTTP
+- Action worker routes by type to HomebridgeClient or ActionDispatcher
+- Accessory picker dropdown on gesture detail page (replaces raw URL form)
+- Admin page: Homebridge host/port/credentials with test connection button
+- Scene triggering via homebridge-dummy plugin switches + HomeKit automations
+- curl fallback for macOS environments with Tailscale network extension
+- See `docs/homebridge-integration.md` for full details
 
 ### Technical notes
 - `httpx` for async HTTP — lighter than `requests`, native async
 - Fire-and-forget with timeout (don't block detection loop)
 - Log failures but don't retry (home automation is best-effort)
+- Homebridge API only exposes its own accessories, not native HomeKit devices
 
 ---
 

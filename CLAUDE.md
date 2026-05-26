@@ -30,7 +30,9 @@ in a GPU.
 - Web app: FastAPI serving live MJPEG feed, training UI, captures, admin
 - Gesture matching: DTW on preprocessed paths (resample → center → scale → rotate)
 - Segmentation: speed-based dwell detection → linearity/curvature filtering
-- Action dispatch: async HTTP via httpx on gesture match
+- Homebridge integration: `HomebridgeClient` in `homebridge.py` handles auth,
+  discovery, and accessory control via the Config UI X REST API
+- Action dispatch: Homebridge toggle/on/off (primary) or custom HTTP (fallback)
 
 ### Segmentation is stable
 The gesture segmentation logic (`segment_at_dwells`, `extract_gesture_candidates`,
@@ -71,11 +73,12 @@ Multiple instances cause silent failures (the second binds to nothing and hangs)
 ## Key files
 
 - `src/magicwand/matching.py` — segmentation + DTW matching engine
+- `src/magicwand/homebridge.py` — Homebridge API client (auth, discovery, control)
 - `src/magicwand/camera.py` — camera thread with pause/resume
-- `src/magicwand/main.py` — FastAPI app factory, startup, port check
+- `src/magicwand/main.py` — FastAPI app factory, action worker routing
 - `src/magicwand/web/routes.py` — all API + page routes
-- `config.toml` — all runtime parameters (detection, matching, camera)
-- `gestures/` — stored gesture JSON files (training data)
+- `config.toml` — all runtime parameters (detection, matching, camera, homebridge)
+- `gestures/` — stored gesture JSON files (training data + actions)
 - `captures/history.jsonl` — ring buffer of recent gesture attempts
 
 ## Out of scope (for now)
