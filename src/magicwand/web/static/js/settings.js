@@ -5,6 +5,7 @@
     setupDetectionForm();
     setupMatchingForm();
     setupHomebridgeForm();
+    setupPowerControls();
     setInterval(loadSystemInfo, 10000);
   });
 
@@ -143,6 +144,62 @@
         showStatus('hb-status', 'Error', false);
       }
     };
+  }
+
+  function setupPowerControls() {
+    const btn = document.getElementById('btn-reboot');
+    if (!btn) return;
+    const statusEl = document.getElementById('reboot-status');
+
+    btn.onclick = async () => {
+      if (!confirm('Reboot the device now? It will be unreachable for ~30–60 seconds.')) {
+        return;
+      }
+      btn.disabled = true;
+      setPersistentStatus(statusEl, 'Sending reboot command…', true);
+      try {
+        const res = await fetch('/api/system/reboot', { method: 'POST' });
+        if (!res.ok) throw new Error('reboot request failed');
+        setPersistentStatus(statusEl, 'Rebooting… waiting for the device to come back', true);
+        waitForReboot(statusEl, btn);
+      } catch (e) {
+        setPersistentStatus(statusEl, 'Error sending reboot command', false);
+        btn.disabled = false;
+      }
+    };
+  }
+
+  // Poll /api/health until the device goes down and comes back up.
+  function waitForReboot(statusEl, btn) {
+    let sawDown = false;
+    const startedAt = Date.now();
+    const timer = setInterval(async () => {
+      // Give up after 3 minutes so the page doesn't poll forever.
+      if (Date.now() - startedAt > 180000) {
+        clearInterval(timer);
+        setPersistentStatus(statusEl, 'Still waiting — try reloading the page', false);
+        btn.disabled = false;
+        return;
+      }
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        if (!r.ok) throw new Error('not ok');
+        if (sawDown) {
+          // It went away and is now answering again → reboot complete.
+          clearInterval(timer);
+          setPersistentStatus(statusEl, 'Back online — reloading…', true);
+          setTimeout(() => location.reload(), 1000);
+        }
+        // If we never saw it go down yet, keep waiting for the drop first.
+      } catch (e) {
+        sawDown = true;  // device is down (rebooting)
+      }
+    }, 2000);
+  }
+
+  function setPersistentStatus(el, msg, success) {
+    el.textContent = msg;
+    el.className = `setting-status ${success ? 'success' : 'error'}`;
   }
 
   function showStatus(id, msg, success) {

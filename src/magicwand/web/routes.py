@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 
@@ -17,6 +18,8 @@ _TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 _start_time = time.monotonic()
 
@@ -189,6 +192,32 @@ async def system_info(request: Request) -> dict:
         "python_version": platform.python_version(),
         "app_version": magicwand.__version__,
     }
+
+
+@router.post("/api/system/reboot")
+async def system_reboot() -> JSONResponse:
+    """Reboot the device.
+
+    Pi only: runs `sudo -n /usr/bin/systemctl reboot`. The `admin` user is
+    granted passwordless sudo for exactly this command via
+    /etc/sudoers.d/magicwand-reboot. `-n` makes sudo fail fast (rather than
+    hang waiting for a password) if that rule is missing. We fire-and-forget
+    with Popen so the HTTP response flushes before the system goes down; on a
+    dev Mac `systemctl` doesn't exist and the command simply errors out
+    harmlessly without rebooting anything.
+    """
+    import subprocess
+
+    logger.warning("Reboot requested via admin page")
+    try:
+        subprocess.Popen(
+            ["sudo", "-n", "/usr/bin/systemctl", "reboot"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as e:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+    return JSONResponse({"ok": True, "message": "Rebooting"})
 
 
 @router.put("/api/settings/detection")
