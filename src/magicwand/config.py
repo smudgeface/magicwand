@@ -29,6 +29,7 @@ class CameraConfig:
     mock: MockCameraConfig = field(default_factory=MockCameraConfig)
     webcam_device: int = 0
     webcam_exposure: float | None = None
+    pi_exposure: float | None = None  # picamera2 ExposureTime in microseconds; None = auto
 
 
 @dataclass
@@ -120,6 +121,7 @@ def _load_config(path: Path | None) -> Config:
         dot_speed=mock_raw.get("dot_speed", 2.0),
     )
     webcam_exposure_raw = camera_raw.get("webcam_exposure")
+    pi_exposure_raw = camera_raw.get("pi_exposure")
     camera = CameraConfig(
         width=camera_raw.get("width", 640),
         height=camera_raw.get("height", 480),
@@ -128,6 +130,7 @@ def _load_config(path: Path | None) -> Config:
         mock=mock,
         webcam_device=camera_raw.get("webcam_device", 0),
         webcam_exposure=float(webcam_exposure_raw) if webcam_exposure_raw is not None else None,
+        pi_exposure=float(pi_exposure_raw) if pi_exposure_raw is not None else None,
     )
 
     detection_raw = raw.get("detection", {})
@@ -243,6 +246,8 @@ def _write_config(config: Config, path: Path) -> None:
     lines.append(f"webcam_device = {config.camera.webcam_device}")
     if config.camera.webcam_exposure is not None:
         lines.append(f"webcam_exposure = {config.camera.webcam_exposure}")
+    if config.camera.pi_exposure is not None:
+        lines.append(f"pi_exposure = {config.camera.pi_exposure}")
     lines.append("")
     lines.append("[camera.mock]")
     lines.append(f"dot_speed = {config.camera.mock.dot_speed}")

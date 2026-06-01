@@ -73,22 +73,63 @@ class MockCamera:
 # ---------------------------------------------------------------------------
 
 class PiCameraSource:
-    """Wraps picamera2 — to be implemented when hardware arrives."""
+    """picamera2-backed source for the Raspberry Pi CSI camera (OV5647, IR-modified).
 
-    def __init__(self, config: CameraConfig) -> None:  # noqa: ARG002
-        pass
+    Produces BGR HxWx3 uint8 frames for OpenCV. We deliberately go through
+    picamera2/libcamera rather than OpenCV's VideoCapture: on modern Pi OS the
+    raw CSI sensor shows up as /dev/video0 ("unicam"), which OpenCV can *open*
+    but not properly drive — you get black or Bayer-garbage frames. picamera2
+    runs the full ISP pipeline and hands back clean, debayered frames.
+
+    The scene is effectively monochrome (850 nm IR through a bandpass filter),
+    so auto-white-balance is disabled to keep pixel intensities stable for the
+    brightness-threshold detector.
+    """
+
+    def __init__(self, config: CameraConfig) -> None:
+        self._width = config.width
+        self._height = config.height
+        self._fps = config.fps
+        self._exposure = config.pi_exposure  # microseconds, or None for auto
+        self._picam = None  # type: ignore[var-annotated]
 
     def start(self) -> None:
-        raise NotImplementedError(
-            "PiCameraSource is not yet implemented. "
-            "Set camera.source = 'mock' in config.toml for development."
+        from picamera2 import Picamera2
+
+        self._picam = Picamera2()
+        # "RGB888" in picamera2 delivers a 3-channel array in B, G, R byte
+        # order — exactly what OpenCV expects, so no cvtColor is needed.
+        video_config = self._picam.create_video_configuration(
+            main={"size": (self._width, self._height), "format": "RGB888"},
+            controls={"FrameRate": float(self._fps)},
+        )
+        self._picam.configure(video_config)
+
+        controls = {"AwbEnable": False}
+        if self._exposure is not None:
+            # Fix exposure for a consistent IR image instead of letting AE hunt.
+            controls.update({"AeEnable": False, "ExposureTime": int(self._exposure)})
+            logger.info("PiCamera manual exposure: %d us", int(self._exposure))
+        else:
+            logger.info("PiCamera using auto exposure")
+        self._picam.set_controls(controls)
+
+        self._picam.start()
+        logger.info(
+            "PiCameraSource started: %dx%d @ %d fps", self._width, self._height, self._fps
         )
 
     def stop(self) -> None:
-        raise NotImplementedError("PiCameraSource is not yet implemented.")
+        if self._picam is not None:
+            self._picam.stop()
+            self._picam.close()
+            self._picam = None
 
     def get_frame(self) -> np.ndarray:
-        raise NotImplementedError("PiCameraSource is not yet implemented.")
+        if self._picam is None:
+            raise RuntimeError("PiCameraSource not started")
+        # capture_array() returns an HxWx3 uint8 array in BGR order (see start()).
+        return self._picam.capture_array()
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +374,18 @@ def make_camera_source(config: CameraConfig) -> CameraSource:
     if config.source == "picamera2":
         return PiCameraSource(config)
     if config.source == "auto":
+        # Try picamera2 (Pi) FIRST. On modern Pi OS the CSI sensor also exposes
+        # a raw /dev/video0 ("unicam") node that OpenCV will happily open but
+        # can't drive — so probing webcam first would falsely win on the Pi and
+        # yield garbage frames. global_camera_info() reports connected CSI
+        # cameras without fully acquiring the device.
+        try:
+            from picamera2 import Picamera2
+            if Picamera2.global_camera_info():
+                logger.info("Auto-detected picamera2 with connected camera")
+                return PiCameraSource(config)
+        except Exception:
+            pass
         # Try webcam (Mac/USB cameras)
         try:
             cap = cv2.VideoCapture(config.webcam_device)
@@ -341,15 +394,6 @@ def make_camera_source(config: CameraConfig) -> CameraSource:
                 logger.info("Auto-detected webcam at device %d", config.webcam_device)
                 return WebcamCamera(config)
             cap.release()
-        except Exception:
-            pass
-        # Try picamera2 (Pi) — probe for an actual connected camera
-        try:
-            from picamera2 import Picamera2
-            cam = Picamera2()
-            cam.close()
-            logger.info("Auto-detected picamera2 with connected camera")
-            return PiCameraSource(config)
         except Exception:
             pass
         # Fall back to mock
