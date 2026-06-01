@@ -6,6 +6,7 @@ via the Homebridge REST API.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 import subprocess
@@ -45,7 +46,16 @@ class HomebridgeClient:
         return self._token is not None and time.monotonic() < self._token_expires
 
     async def start(self) -> None:
-        self._client = httpx.AsyncClient(timeout=10.0)
+        # Short, granular timeouts: a LAN action should resolve fast or fail
+        # fast. A long timeout here is what let a dead Homebridge stall things.
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=2.0))
+
+    async def _curl_async(self, method: str, path: str, headers: dict, json_body=None):
+        """Run the blocking curl fallback in a thread so it never blocks the loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self._curl_request, method, path, headers, json_body
+        )
 
     async def stop(self) -> None:
         if self._client:
@@ -93,7 +103,7 @@ class HomebridgeClient:
         except (httpx.ConnectError, httpx.TimeoutException):
             logger.debug("httpx auth failed, trying curl for %s", path)
 
-        return self._curl_request("POST", path, {}, body)
+        return await self._curl_async("POST", path, {}, body)
 
     async def get_accessories(self) -> list[dict]:
         """Return accessories filtered to lights/switches."""
@@ -177,21 +187,21 @@ class HomebridgeClient:
         except (httpx.ConnectError, httpx.TimeoutException):
             logger.debug("httpx failed, falling back to curl for %s %s", method, path)
 
-        return self._curl_request(method, path, headers, json_body)
+        return await self._curl_async(method, path, headers, json_body)
 
     def _curl_request(
         self, method: str, path: str, headers: dict, json_body=None
     ) -> dict | list | None:
         """Fallback HTTP via curl (works through macOS network extensions)."""
         url = f"{self.base_url}{path}"
-        cmd = ["curl", "-s", "--max-time", "10", "-X", method]
+        cmd = ["curl", "-s", "--max-time", "3", "-X", method]
         for k, v in headers.items():
             cmd.extend(["-H", f"{k}: {v}"])
         if json_body is not None:
             cmd.extend(["-H", "Content-Type: application/json", "-d", _json.dumps(json_body)])
         cmd.append(url)
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if result.returncode == 0 and result.stdout.strip():
                 return _json.loads(result.stdout)
         except (subprocess.TimeoutExpired, _json.JSONDecodeError, OSError) as e:
