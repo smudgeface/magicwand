@@ -111,7 +111,13 @@
           body: document.getElementById('action-body').value || null,
         };
       } else {
-        showActionResult('Select an accessory or enter a URL', false);
+        // Nothing selected → save the cleared state (remove any action).
+        try {
+          await fetchJSON(`/api/gestures/${gestureName}/action`, { method: 'DELETE' });
+          showActionResult('Saved — no action assigned', true);
+        } catch (err) {
+          showActionResult(`Error: ${err.message}`, false);
+        }
         return;
       }
 
