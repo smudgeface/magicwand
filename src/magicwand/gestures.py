@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,29}$")
 
@@ -44,13 +49,15 @@ class GestureStore:
         self._dir.mkdir(parents=True, exist_ok=True)
         self._gestures: dict[str, Gesture] = {}
         self.on_change: Callable[[str | None], None] | None = None
-        # Load existing gesture files
+        # Load existing gesture files. Any single unreadable/corrupt file is
+        # skipped (and logged) rather than allowed to crash startup — a power
+        # cut should at worst drop one gesture, never take down the app.
         for path in sorted(self._dir.glob("*.json")):
             try:
                 gesture = self._load(path)
                 self._gestures[gesture.name] = gesture
-            except (json.JSONDecodeError, KeyError, TypeError):
-                # Skip malformed files
+            except Exception as e:
+                logger.warning("Skipping unreadable gesture file %s: %s", path.name, e)
                 continue
 
     def list(self) -> list[str]:
@@ -135,18 +142,55 @@ class GestureStore:
         return True
 
     def _save(self, gesture: Gesture) -> None:
-        """Write gesture to its JSON file."""
+        """Atomically write a gesture to its JSON file.
+
+        Writes to a temp file in the same directory, flushes it to disk, then
+        renames it over the target. os.replace is atomic, so a power cut or
+        crash leaves either the previous file or the complete new one on
+        disk — never a half-written, app-breaking file.
+        """
         path = self._dir / f"{gesture.name}.json"
-        data = {
-            "name": gesture.name,
-            "created_at": gesture.created_at,
-            "samples": [
-                [{"x": pt.x, "y": pt.y, "t": pt.t} for pt in sample]
-                for sample in gesture.samples
-            ],
-            "action": gesture.action,
-        }
-        path.write_text(json.dumps(data, indent=2) + "\n")
+        text = json.dumps(
+            {
+                "name": gesture.name,
+                "created_at": gesture.created_at,
+                "samples": [
+                    [{"x": pt.x, "y": pt.y, "t": pt.t} for pt in sample]
+                    for sample in gesture.samples
+                ],
+                "action": gesture.action,
+            },
+            indent=2,
+        ) + "\n"
+
+        # Hidden ".name." prefix keeps stray temp files out of the *.json glob.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self._dir, prefix=f".{gesture.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, path)
+        except BaseException:
+            # Don't leave a temp file behind if anything failed mid-write.
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
+
+        # Best-effort: flush the directory entry so the rename itself survives
+        # a power cut. Harmless no-op on platforms that don't support it.
+        try:
+            dir_fd = os.open(self._dir, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
 
     def _load(self, path: Path) -> Gesture:
         """Load a gesture from its JSON file."""

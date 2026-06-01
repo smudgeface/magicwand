@@ -2,10 +2,50 @@
 
 from __future__ import annotations
 
+import json
 import pytest
 from pathlib import Path
 
 from magicwand.gestures import GestureStore, GesturePoint, validate_gesture_name
+
+
+# ---------------------------------------------------------------------------
+# GestureStore — durable / atomic persistence
+# ---------------------------------------------------------------------------
+
+def test_corrupt_file_skipped_not_fatal(tmp_path: Path) -> None:
+    """A corrupt gesture file is skipped; valid gestures still load."""
+    store = GestureStore(tmp_path)
+    store.create("good")
+    # Simulate a half-written file from a power cut mid-save.
+    (tmp_path / "broken.json").write_text('{"name": "broken", "samp')
+
+    # A fresh store must not raise, and must load the good gesture.
+    reopened = GestureStore(tmp_path)
+    assert reopened.get("good") is not None
+    assert reopened.get("broken") is None
+    assert "good" in reopened.list()
+
+
+def test_save_leaves_no_temp_files(tmp_path: Path) -> None:
+    """Atomic save cleans up after itself and isn't picked up as a gesture."""
+    store = GestureStore(tmp_path)
+    store.create("lumos")
+    store.set_action("lumos", {"type": "homebridge"})
+
+    # Only the real file remains; no leftover *.tmp scratch files.
+    assert {p.name for p in tmp_path.iterdir()} == {"lumos.json"}
+    assert GestureStore(tmp_path).list() == ["lumos"]
+
+
+def test_save_is_valid_after_multiple_writes(tmp_path: Path) -> None:
+    """Repeated saves keep the file complete and parseable."""
+    store = GestureStore(tmp_path)
+    store.create("lumos")
+    for _ in range(5):
+        store.add_sample("lumos", [GesturePoint(0.1, 0.2, 0.0)])
+    data = json.loads((tmp_path / "lumos.json").read_text())
+    assert len(data["samples"]) == 5
 
 
 # ---------------------------------------------------------------------------
