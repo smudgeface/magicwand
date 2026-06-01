@@ -10,6 +10,12 @@
       <span class="status-sep">•</span>
       <span class="status-item" id="stream-fps">FPS: —</span>
       <span class="status-sep">•</span>
+      <span class="view-toggle" id="view-toggle">
+        <button class="btn btn-sm btn-secondary" data-view="overlay">Overlay</button>
+        <button class="btn btn-sm btn-secondary" data-view="filtered">Filtered</button>
+        <button class="btn btn-sm btn-secondary" data-view="raw">Raw</button>
+      </span>
+      <span class="status-sep">•</span>
       <button id="btn-capture-toggle" class="btn btn-sm btn-secondary" onclick="toggleCapture()">Stop Capture</button>
     </div>
   </div>
@@ -35,6 +41,30 @@
   document.getElementById('stream-fps').textContent = 'FPS: ' + info.detection_fps;
   const status = await fetch('/api/camera/status').then(r => r.json());
   updateCaptureButton(status.capturing);
+
+  // View-mode toggle (Overlay / Filtered / Raw) — shared server-side state.
+  const viewWrap = document.getElementById('view-toggle');
+  function reflectView(mode) {
+    viewWrap.querySelectorAll('button').forEach(b => {
+      b.className = 'btn btn-sm ' + (b.dataset.view === mode ? 'btn-primary' : 'btn-secondary');
+    });
+  }
+  try {
+    const v = await fetch('/api/detection/view').then(r => r.json());
+    reflectView(v.mode);
+  } catch (e) {}
+  viewWrap.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        const v = await fetch('/api/detection/view', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: btn.dataset.view }),
+        }).then(r => r.json());
+        reflectView(v.mode);
+      } catch (e) {}
+    });
+  });
 })();
 
 function updateCaptureButton(capturing) {

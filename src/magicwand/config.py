@@ -30,6 +30,7 @@ class CameraConfig:
     webcam_device: int = 0
     webcam_exposure: float | None = None
     pi_exposure: float | None = None  # picamera2 ExposureTime in microseconds; None = auto
+    pi_gain: float | None = None  # picamera2 AnalogueGain; None = auto
 
 
 @dataclass
@@ -40,6 +41,14 @@ class DetectionConfig:
     blur_kernel: int = 5
     trail_hold: float = 5.0
     trail_fade: float = 5.0
+    # Noise rejection. tophat_kernel>0 enables a white top-hat that measures
+    # each spot's local prominence (contrast/edge); min_contrast gates on it.
+    # Circularity is only applied to blobs at/above circularity_min_area so
+    # that genuine single-pixel detections are never rejected on shape.
+    tophat_kernel: int = 0
+    min_contrast: int = 0
+    min_circularity: float = 0.0
+    circularity_min_area: int = 12
 
 
 @dataclass
@@ -122,6 +131,7 @@ def _load_config(path: Path | None) -> Config:
     )
     webcam_exposure_raw = camera_raw.get("webcam_exposure")
     pi_exposure_raw = camera_raw.get("pi_exposure")
+    pi_gain_raw = camera_raw.get("pi_gain")
     camera = CameraConfig(
         width=camera_raw.get("width", 640),
         height=camera_raw.get("height", 480),
@@ -131,6 +141,7 @@ def _load_config(path: Path | None) -> Config:
         webcam_device=camera_raw.get("webcam_device", 0),
         webcam_exposure=float(webcam_exposure_raw) if webcam_exposure_raw is not None else None,
         pi_exposure=float(pi_exposure_raw) if pi_exposure_raw is not None else None,
+        pi_gain=float(pi_gain_raw) if pi_gain_raw is not None else None,
     )
 
     detection_raw = raw.get("detection", {})
@@ -141,6 +152,10 @@ def _load_config(path: Path | None) -> Config:
         blur_kernel=detection_raw.get("blur_kernel", 5),
         trail_hold=detection_raw.get("trail_hold", 5.0),
         trail_fade=detection_raw.get("trail_fade", 5.0),
+        tophat_kernel=detection_raw.get("tophat_kernel", 0),
+        min_contrast=detection_raw.get("min_contrast", 0),
+        min_circularity=detection_raw.get("min_circularity", 0.0),
+        circularity_min_area=detection_raw.get("circularity_min_area", 12),
     )
 
     gestures_raw = raw.get("gestures", {})
@@ -248,6 +263,8 @@ def _write_config(config: Config, path: Path) -> None:
         lines.append(f"webcam_exposure = {config.camera.webcam_exposure}")
     if config.camera.pi_exposure is not None:
         lines.append(f"pi_exposure = {config.camera.pi_exposure}")
+    if config.camera.pi_gain is not None:
+        lines.append(f"pi_gain = {config.camera.pi_gain}")
     lines.append("")
     lines.append("[camera.mock]")
     lines.append(f"dot_speed = {config.camera.mock.dot_speed}")
@@ -259,6 +276,10 @@ def _write_config(config: Config, path: Path) -> None:
     lines.append(f"blur_kernel = {config.detection.blur_kernel}")
     lines.append(f"trail_hold = {config.detection.trail_hold}")
     lines.append(f"trail_fade = {config.detection.trail_fade}")
+    lines.append(f"tophat_kernel = {config.detection.tophat_kernel}")
+    lines.append(f"min_contrast = {config.detection.min_contrast}")
+    lines.append(f"min_circularity = {config.detection.min_circularity}")
+    lines.append(f"circularity_min_area = {config.detection.circularity_min_area}")
     lines.append("")
     lines.append("[gestures]")
     lines.append(f'directory = "{config.gestures.directory}"')

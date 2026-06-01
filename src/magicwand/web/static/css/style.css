@@ -271,6 +271,7 @@ select.input { appearance: auto; }
 .badge-error { background: rgba(220,38,38,0.2); color: #dc2626; }
 .badge-info { background: rgba(124,58,237,0.2); color: #c4b5fd; }
 .log-detail { color: #e0e0e0; }
+.view-toggle { display: inline-flex; gap: 0.25rem; }
 .event-log-full { max-height: 70vh; }
 .log-empty { color: #666; padding: 0.5rem 0; }
 .ws-status { font-size: 0.75rem; }

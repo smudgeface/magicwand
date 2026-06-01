@@ -2,12 +2,80 @@
   document.addEventListener('DOMContentLoaded', () => {
     loadCurrentSettings();
     loadSystemInfo();
+    setupCameraForm();
     setupDetectionForm();
     setupMatchingForm();
     setupHomebridgeForm();
     setupPowerControls();
     setInterval(loadSystemInfo, 10000);
   });
+
+  async function setupCameraForm() {
+    const modeSel = document.getElementById('cam-exposure-mode');
+    const expSlider = document.getElementById('cam-exposure');
+    const expVal = document.getElementById('cam-exposure-val');
+    const gainSlider = document.getElementById('cam-gain');
+    const gainVal = document.getElementById('cam-gain-val');
+
+    function reflectMode() {
+      const manual = modeSel.value === 'manual';
+      document.getElementById('cam-manual-controls').style.display = manual ? '' : 'none';
+    }
+    expSlider.addEventListener('input', () => { expVal.textContent = `${expSlider.value} µs`; });
+    gainSlider.addEventListener('input', () => { gainVal.textContent = `${(+gainSlider.value).toFixed(1)}×`; });
+    modeSel.addEventListener('change', reflectMode);
+
+    async function load() {
+      let c;
+      try { c = await fetch('/api/camera/controls').then(r => r.json()); } catch (e) { return; }
+      if (!c || !c.available) {
+        document.getElementById('cam-controls').style.display = 'none';
+        document.getElementById('cam-unavailable').style.display = '';
+        return;
+      }
+      expSlider.min = c.exposure_min; expSlider.max = c.exposure_max;
+      gainSlider.min = c.gain_min; gainSlider.max = c.gain_max;
+      modeSel.value = c.auto_exposure ? 'auto' : 'manual';
+      expSlider.value = c.exposure_us; expVal.textContent = `${c.exposure_us} µs`;
+      gainSlider.value = c.gain; gainVal.textContent = `${(+c.gain).toFixed(1)}×`;
+      reflectMode();
+      updateReadout(c);
+    }
+
+    function updateReadout(c) {
+      const mode = c.auto_exposure ? 'auto' : 'manual';
+      document.getElementById('cam-readout').textContent =
+        `${c.exposure_us} µs · ${(+c.gain).toFixed(1)}× (${mode})`;
+    }
+
+    document.getElementById('btn-apply-camera').onclick = async () => {
+      const body = { auto_exposure: modeSel.value === 'auto' };
+      if (!body.auto_exposure) {
+        body.exposure_us = parseInt(expSlider.value);
+        body.gain = parseFloat(gainSlider.value);
+      }
+      try {
+        const c = await fetch('/api/camera/controls', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(r => r.json());
+        if (c.available) { updateReadout(c); showStatus('cam-status', 'Applied', true); }
+        else showStatus('cam-status', 'Not supported', false);
+      } catch (e) {
+        showStatus('cam-status', 'Error', false);
+      }
+    };
+
+    await load();
+    // Refresh the live readout periodically (useful in auto mode to see AE).
+    setInterval(async () => {
+      try {
+        const c = await fetch('/api/camera/controls').then(r => r.json());
+        if (c && c.available) updateReadout(c);
+      } catch (e) {}
+    }, 3000);
+  }
 
   async function loadCurrentSettings() {
     try {
@@ -20,6 +88,10 @@
       document.getElementById('det-blur').value = cfg.blur_kernel;
       document.getElementById('det-trail-hold').value = cfg.trail_hold;
       document.getElementById('det-trail-fade').value = cfg.trail_fade;
+      document.getElementById('det-tophat').value = cfg.tophat_kernel;
+      document.getElementById('det-contrast').value = cfg.min_contrast;
+      document.getElementById('det-circularity').value = cfg.min_circularity;
+      document.getElementById('det-circ-area').value = cfg.circularity_min_area;
     } catch (e) {}
 
     try {
@@ -67,6 +139,10 @@
         blur_kernel: parseInt(document.getElementById('det-blur').value),
         trail_hold: parseFloat(document.getElementById('det-trail-hold').value),
         trail_fade: parseFloat(document.getElementById('det-trail-fade').value),
+        tophat_kernel: parseInt(document.getElementById('det-tophat').value),
+        min_contrast: parseInt(document.getElementById('det-contrast').value),
+        min_circularity: parseFloat(document.getElementById('det-circularity').value),
+        circularity_min_area: parseInt(document.getElementById('det-circ-area').value),
       };
       try {
         await fetch('/api/settings/detection', {

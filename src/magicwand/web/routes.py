@@ -123,6 +123,36 @@ async def camera_stop(request: Request) -> dict:
     return {"capturing": False}
 
 
+@router.get("/api/camera/controls")
+async def camera_controls(request: Request) -> dict:
+    """Return current camera exposure/gain controls and their ranges."""
+    return request.app.state.camera_thread.get_camera_controls()
+
+
+@router.put("/api/camera/controls")
+async def update_camera_controls(request: Request) -> dict:
+    """Apply exposure/gain to the live camera and persist to config.toml."""
+    from magicwand.config import get_config, save_config
+
+    body = await request.json()
+    ct = request.app.state.camera_thread
+    result = ct.apply_camera_controls(
+        auto_exposure=body.get("auto_exposure"),
+        exposure_us=body.get("exposure_us"),
+        gain=body.get("gain"),
+    )
+    if result.get("available"):
+        cfg = get_config()
+        if result.get("auto_exposure"):
+            cfg.camera.pi_exposure = None
+            cfg.camera.pi_gain = None
+        else:
+            cfg.camera.pi_exposure = float(result["exposure_us"])
+            cfg.camera.pi_gain = float(result["gain"])
+        save_config()
+    return result
+
+
 @router.get("/api/system/info")
 async def system_info(request: Request) -> dict:
     """Return system stats: uptime, CPU temp, RAM, disk, camera, FPS, versions."""
@@ -241,7 +271,15 @@ async def update_detection_settings(request: Request) -> dict:
     app_cfg.detection.blur_kernel = cfg.blur_kernel
     app_cfg.detection.trail_hold = cfg.trail_hold
     app_cfg.detection.trail_fade = cfg.trail_fade
+    app_cfg.detection.tophat_kernel = cfg.tophat_kernel
+    app_cfg.detection.min_contrast = cfg.min_contrast
+    app_cfg.detection.min_circularity = cfg.min_circularity
+    app_cfg.detection.circularity_min_area = cfg.circularity_min_area
     save_config()
+    return _detection_config_dict(cfg)
+
+
+def _detection_config_dict(cfg) -> dict:
     return {
         "threshold": cfg.threshold,
         "min_area": cfg.min_area,
@@ -249,6 +287,10 @@ async def update_detection_settings(request: Request) -> dict:
         "blur_kernel": cfg.blur_kernel,
         "trail_hold": cfg.trail_hold,
         "trail_fade": cfg.trail_fade,
+        "tophat_kernel": cfg.tophat_kernel,
+        "min_contrast": cfg.min_contrast,
+        "min_circularity": cfg.min_circularity,
+        "circularity_min_area": cfg.circularity_min_area,
     }
 
 
@@ -259,15 +301,24 @@ async def detection_status(request: Request) -> dict:
     return {
         "fps": round(detector.fps, 1),
         "trail_points": len(detector.trail),
-        "config": {
-            "threshold": detector._config.threshold,
-            "min_area": detector._config.min_area,
-            "max_area": detector._config.max_area,
-            "blur_kernel": detector._config.blur_kernel,
-            "trail_hold": detector._config.trail_hold,
-            "trail_fade": detector._config.trail_fade,
-        },
+        "config": _detection_config_dict(detector._config),
     }
+
+
+@router.get("/api/detection/view")
+async def get_detection_view(request: Request) -> dict:
+    """Return the current stream view mode."""
+    return {"mode": request.app.state.detector.view_mode}
+
+
+@router.post("/api/detection/view")
+async def set_detection_view(request: Request) -> dict:
+    """Set the stream view mode: overlay | filtered | raw."""
+    body = await request.json()
+    detector = request.app.state.detector
+    mode = body.get("mode", "")
+    ok = detector.set_view_mode(mode)
+    return {"mode": detector.view_mode, "ok": ok}
 
 
 # ---------------------------------------------------------------------------

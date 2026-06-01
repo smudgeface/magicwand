@@ -90,8 +90,13 @@ class PiCameraSource:
         self._width = config.width
         self._height = config.height
         self._fps = config.fps
+        # Initial exposure/gain from config. None => auto-exposure.
         self._exposure = config.pi_exposure  # microseconds, or None for auto
+        self._gain = config.pi_gain  # analogue gain, or None
+        self._auto_exposure = config.pi_exposure is None
         self._picam = None  # type: ignore[var-annotated]
+        self._lock = threading.Lock()
+        self._last_meta: dict = {}  # latest frame metadata, updated each capture
 
     def start(self) -> None:
         from picamera2 import Picamera2
@@ -105,13 +110,21 @@ class PiCameraSource:
         )
         self._picam.configure(video_config)
 
+        # AWB off: the IR scene is effectively monochrome, so leave colour
+        # gains fixed and let the brightness-threshold detector see stable values.
         controls = {"AwbEnable": False}
-        if self._exposure is not None:
-            # Fix exposure for a consistent IR image instead of letting AE hunt.
-            controls.update({"AeEnable": False, "ExposureTime": int(self._exposure)})
-            logger.info("PiCamera manual exposure: %d us", int(self._exposure))
-        else:
+        if self._auto_exposure:
+            controls["AeEnable"] = True
             logger.info("PiCamera using auto exposure")
+        else:
+            controls["AeEnable"] = False
+            controls["ExposureTime"] = int(self._exposure)
+            if self._gain is not None:
+                controls["AnalogueGain"] = float(self._gain)
+            logger.info(
+                "PiCamera manual exposure: %d us, gain: %s",
+                int(self._exposure), self._gain,
+            )
         self._picam.set_controls(controls)
 
         self._picam.start()
@@ -120,16 +133,96 @@ class PiCameraSource:
         )
 
     def stop(self) -> None:
-        if self._picam is not None:
-            self._picam.stop()
-            self._picam.close()
-            self._picam = None
+        with self._lock:
+            if self._picam is not None:
+                self._picam.stop()
+                self._picam.close()
+                self._picam = None
 
     def get_frame(self) -> np.ndarray:
         if self._picam is None:
             raise RuntimeError("PiCameraSource not started")
-        # capture_array() returns an HxWx3 uint8 array in BGR order (see start()).
-        return self._picam.capture_array()
+        # Pull the frame and its metadata together from one request, so the
+        # admin "live readout" can show the actual exposure/gain (especially
+        # what auto-exposure picked) without a separate blocking metadata call
+        # in the request path. The array is HxWx3 uint8 in BGR order (see start()).
+        request = self._picam.capture_request()
+        try:
+            frame = request.make_array("main")
+            self._last_meta = request.get_metadata()
+        finally:
+            request.release()  # always release or the camera starves for buffers
+        return frame
+
+    # --- Runtime controls (used by the admin Camera section) ---------------
+
+    def get_controls(self) -> dict:
+        """Report current exposure/gain plus the sensor's adjustable ranges.
+
+        Non-blocking: reads cached metadata from the last captured frame and
+        the static control-range table — no blocking capture_metadata() call,
+        so it's safe to hit from the request path while the camera streams.
+        """
+        if self._picam is None:
+            return {"available": False}
+        try:
+            meta = self._last_meta or {}
+            cc = self._picam.camera_controls
+            exp_lo, exp_hi, _ = cc.get("ExposureTime", (100, 1_000_000, None))
+            gain_lo, gain_hi, _ = cc.get("AnalogueGain", (1.0, 16.0, None))
+            # Cap the exposure UI at one frame period — longer would drop FPS.
+            frame_period = int(1_000_000 / self._fps)
+            return {
+                "available": True,
+                "auto_exposure": self._auto_exposure,
+                "exposure_us": int(meta.get("ExposureTime", self._exposure or 0)),
+                "gain": round(float(meta.get("AnalogueGain", self._gain or 1.0)), 2),
+                "exposure_min": int(exp_lo),
+                "exposure_max": min(int(exp_hi), frame_period),
+                "gain_min": round(float(gain_lo), 2),
+                "gain_max": round(float(gain_hi), 2),
+            }
+        except Exception as e:  # pragma: no cover - hardware dependent
+            logger.warning("get_controls failed: %s", e)
+            return {"available": False, "error": str(e)}
+
+    def apply_controls(
+        self,
+        auto_exposure: bool | None = None,
+        exposure_us: float | None = None,
+        gain: float | None = None,
+    ) -> dict:
+        """Apply exposure/gain to the live camera and return the new state."""
+        if self._picam is None:
+            return {"available": False}
+        controls: dict = {}
+        if auto_exposure is not None:
+            self._auto_exposure = bool(auto_exposure)
+            controls["AeEnable"] = self._auto_exposure
+        if not self._auto_exposure:
+            # Only meaningful in manual mode.
+            if exposure_us is not None:
+                self._exposure = int(exposure_us)
+                controls["ExposureTime"] = int(exposure_us)
+            if gain is not None:
+                self._gain = float(gain)
+                controls["AnalogueGain"] = float(gain)
+        if controls:
+            self._picam.set_controls(controls)
+            logger.info("PiCamera controls updated: %s", controls)
+        # Return the INTENDED state we just set, not capture metadata: metadata
+        # lags by a frame, so reading it back here would report (and persist)
+        # the pre-change exposure/gain. The live readout (get_controls) shows
+        # actual values; this return is what gets written to config.
+        state = self.get_controls()
+        if state.get("available"):
+            state["auto_exposure"] = self._auto_exposure
+            if not self._auto_exposure:
+                if self._exposure is not None:
+                    state["exposure_us"] = int(self._exposure)
+                if self._gain is not None:
+                    state["gain"] = round(float(self._gain), 2)
+        return state
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +327,20 @@ class CameraThread(threading.Thread):
     def resume(self) -> None:
         """Resume frame capture."""
         self._paused = False
+
+    def get_camera_controls(self) -> dict:
+        """Return adjustable camera controls if the source supports them."""
+        src = self._source
+        if hasattr(src, "get_controls"):
+            return src.get_controls()
+        return {"available": False}
+
+    def apply_camera_controls(self, **kwargs) -> dict:
+        """Apply camera controls if the source supports them."""
+        src = self._source
+        if hasattr(src, "apply_controls"):
+            return src.apply_controls(**kwargs)
+        return {"available": False}
 
     def stop(self) -> None:
         """Signal the thread to stop and wait for it to finish."""

@@ -123,6 +123,85 @@ def test_contour_area_filter_large() -> None:
 
 
 # ---------------------------------------------------------------------------
+# New filters: single-pixel, contrast (top-hat), circularity, view modes
+# ---------------------------------------------------------------------------
+
+def test_single_pixel_detected_with_min_area_one() -> None:
+    """A single bright pixel IS detected when min_area=1 (connected components)."""
+    frame = _black_frame()
+    cv2.circle(frame, (320, 240), 0, (255, 255, 255), -1)  # one pixel
+    # blur_kernel=1 (no blur): a Gaussian blur would smear a 1px spike below
+    # threshold, so single-pixel work requires blur off.
+    detector = Detector(_default_config(threshold=200, min_area=1, blur_kernel=1))
+
+    _, result = detector.process(frame)
+
+    assert result.detected is True
+    assert result.position is not None
+    assert abs(result.position[0] - 320) <= 1
+    assert abs(result.position[1] - 240) <= 1
+
+
+def test_contrast_filter_rejects_dot_on_ambient_glow() -> None:
+    """A bright dot sitting on a sub-threshold glow is rejected by min_contrast."""
+    frame = _black_frame()
+    cv2.circle(frame, (320, 240), 70, (235, 235, 235), -1)  # broad faint pedestal
+    cv2.circle(frame, (320, 240), 2, (255, 255, 255), -1)   # sharp tip on top
+    # threshold=240 → only the 255 tip passes; the 235 glow lifts its local
+    # background so its top-hat prominence is low.
+    base = dict(threshold=240, min_area=1, tophat_kernel=25)
+
+    kept = Detector(_default_config(**base, min_contrast=0))
+    _, r_kept = kept.process(frame)
+    assert r_kept.detected is True  # contrast filter off → found
+
+    rejected = Detector(_default_config(**base, min_contrast=80))
+    _, r_rej = rejected.process(frame)
+    assert r_rej.detected is False  # low prominence on glow → filtered
+
+
+def test_circularity_filter_rejects_line_keeps_dot() -> None:
+    """Circularity rejects an elongated blob but keeps a round one (above min area)."""
+    cfg = dict(threshold=200, min_area=20, min_circularity=0.7, circularity_min_area=10)
+
+    line = _black_frame()
+    cv2.line(line, (300, 240), (360, 240), (255, 255, 255), 3)  # long & thin
+    _, r_line = Detector(_default_config(**cfg)).process(line)
+    assert r_line.detected is False
+
+    dot = _frame_with_dot(radius=8)
+    _, r_dot = Detector(_default_config(**cfg)).process(dot)
+    assert r_dot.detected is True
+
+
+def test_circularity_skipped_for_tiny_blobs() -> None:
+    """A 1px blob is NOT rejected by circularity (below circularity_min_area)."""
+    frame = _black_frame()
+    cv2.circle(frame, (320, 240), 0, (255, 255, 255), -1)
+    detector = Detector(_default_config(
+        threshold=200, min_area=1, blur_kernel=1,
+        min_circularity=0.9, circularity_min_area=12))
+
+    _, result = detector.process(frame)
+    assert result.detected is True
+
+
+def test_view_modes_change_output_not_result() -> None:
+    """Switching view mode changes the rendered frame but not the detection."""
+    frame = _frame_with_dot(radius=10)
+    detector = Detector(_default_config(threshold=240))
+
+    assert detector.set_view_mode("filtered") is True
+    out_f, res_f = detector.process(frame)
+    detector.set_view_mode("raw")
+    out_r, res_r = detector.process(frame)
+
+    assert res_f.detected and res_r.detected  # detection independent of view
+    assert out_f.shape == frame.shape and out_r.shape == frame.shape
+    assert detector.set_view_mode("bogus") is False
+
+
+# ---------------------------------------------------------------------------
 # Trail behaviour
 # ---------------------------------------------------------------------------
 

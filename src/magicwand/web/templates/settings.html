@@ -6,6 +6,43 @@
 <main>
   <h2>Admin</h2>
 
+  <!-- Camera controls -->
+  <section class="card" id="camera-card">
+    <h3>Camera</h3>
+    <p id="cam-unavailable" style="color:#8888aa; margin:0 0 0.75rem; font-size:0.9rem; display:none;">
+      Live camera controls are only available with the Pi camera (picamera2).
+    </p>
+    <div id="cam-controls">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Exposure mode <button class="tip-btn" data-tip="Auto lets the camera pick exposure — with a leaky IR filter this brightens the whole scene and washes out the bead. Manual lets you fix a short exposure so only the bright IR reflection survives and ambient light goes dark.">?</button></label>
+          <select id="cam-exposure-mode" class="input">
+            <option value="auto">Auto</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Live readout</label>
+          <span id="cam-readout" class="info-value">—</span>
+        </div>
+      </div>
+      <div id="cam-manual-controls">
+        <div class="form-group">
+          <label>Exposure (µs) <button class="tip-btn" data-tip="Shutter time in microseconds. Lower = darker image, suppresses ambient light, isolates the bright bead. Raise until the tip is reliably visible but the background stays dark.">?</button></label>
+          <input type="range" id="cam-exposure" class="input-range" min="100" max="33000" step="100" value="5000">
+          <span id="cam-exposure-val" class="range-value"></span>
+        </div>
+        <div class="form-group">
+          <label>Gain <button class="tip-btn" data-tip="Analogue sensor gain (like ISO). Higher amplifies everything — including ambient noise. Keep this low (near minimum) so only the genuinely bright bead stands out.">?</button></label>
+          <input type="range" id="cam-gain" class="input-range" min="1" max="16" step="0.1" value="1">
+          <span id="cam-gain-val" class="range-value"></span>
+        </div>
+      </div>
+      <button id="btn-apply-camera" class="btn btn-primary">Apply</button>
+      <span id="cam-status" class="setting-status"></span>
+    </div>
+  </section>
+
   <!-- Detection settings -->
   <section class="card">
     <h3>Detection</h3>
@@ -43,6 +80,27 @@
       <div class="form-group">
         <label>Trail Fade (s) <button class="tip-btn" data-tip="Seconds over which the trail fades from full brightness to invisible, after the hold period. Each point fades independently based on its own age.">?</button></label>
         <input type="number" id="det-trail-fade" class="input" value="" min="0" max="30" step="0.5">
+      </div>
+    </div>
+    <h4 style="color:#8888aa; margin: 1.5rem 0 0.75rem; font-weight: 400;">Noise rejection</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Top-hat Kernel <button class="tip-btn" data-tip="Size (px) of the white top-hat filter that measures each spot's local contrast against its background — the core defence against ambient glow. Should be a bit larger than the wand tip. 0 disables it. Try 15–25.">?</button></label>
+        <input type="number" id="det-tophat" class="input" value="" min="0" max="51" step="2">
+      </div>
+      <div class="form-group">
+        <label>Min Contrast <button class="tip-btn" data-tip="Minimum local prominence (0–255) a spot must have above its surroundings — your 'high-contrast edge' filter. Rejects bright-but-diffuse ambient regions. Works down to a single pixel. Raise to reject more. Needs Top-hat Kernel > 0.">?</button></label>
+        <input type="number" id="det-contrast" class="input" value="" min="0" max="255">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Min Circularity <button class="tip-btn" data-tip="Minimum roundness (0–1, where 1 is a perfect circle) for blobs at or above the area below. Rejects elongated/irregular reflections. 0 disables it. Try ~0.6.">?</button></label>
+        <input type="number" id="det-circularity" class="input" value="" min="0" max="1" step="0.05">
+      </div>
+      <div class="form-group">
+        <label>Circularity Min Area <button class="tip-btn" data-tip="Circularity is only applied to blobs this size (px) or larger — smaller spots (down to a single pixel) bypass the shape check, so genuine tiny tip detections are never rejected on roundness.">?</button></label>
+        <input type="number" id="det-circ-area" class="input" value="" min="1" max="500">
       </div>
     </div>
     <button id="btn-apply-detection" class="btn btn-primary">Apply</button>
