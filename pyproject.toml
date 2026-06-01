@@ -9,6 +9,9 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.104",
     "uvicorn[standard]>=0.24",
+    # Explicit so the /ws/events live event stream works even if a bare
+    # uvicorn (without the [standard] extra) gets installed on the Pi.
+    "websockets>=12",
     "jinja2>=3.1",
     "opencv-python-headless>=4.8",
     "numpy>=1.24",
