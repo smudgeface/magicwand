@@ -138,28 +138,40 @@ class EventBus:
         event_type: str | None = None,
         limit: int = 100,
     ) -> list[dict]:
-        """Read historical log entries. Reads from the current log file."""
+        """Read historical log entries across the current file and rotated archives.
+
+        Reads oldest-first so the result is chronological: events.{N}.jsonl
+        (oldest) … events.1.jsonl, then events.jsonl (newest). Returns the most
+        recent 'limit' entries after applying the optional filters.
+        """
         if not self._log_dir:
             return []
-        log_file = self._log_dir / "events.jsonl"
-        if not log_file.exists():
-            return []
+
+        # Oldest archive first, current file last → chronological order.
+        files = [
+            self._log_dir / f"events.{i}.jsonl"
+            for i in range(self._max_files - 1, 0, -1)
+        ]
+        files.append(self._log_dir / "events.jsonl")
 
         entries = []
-        with open(log_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if since and entry.get("timestamp", "") < since:
-                    continue
-                if event_type and entry.get("type") != event_type:
-                    continue
-                entries.append(entry)
+        for log_file in files:
+            if not log_file.exists():
+                continue
+            with open(log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if since and entry.get("timestamp", "") < since:
+                        continue
+                    if event_type and entry.get("type") != event_type:
+                        continue
+                    entries.append(entry)
 
         # Return the most recent 'limit' entries
         return entries[-limit:]

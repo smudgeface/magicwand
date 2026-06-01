@@ -116,6 +116,24 @@ def test_read_logs_returns_events(tmp_path: Path) -> None:
     assert results[1]["data"]["name"] == "third"
 
 
+def test_read_logs_spans_rotated_files(tmp_path: Path) -> None:
+    """read_logs reads rotated archives + current file in chronological order."""
+    # events.2 (oldest), events.1, events.jsonl (newest) — write directly.
+    (tmp_path / "events.2.jsonl").write_text(
+        json.dumps({"timestamp": "t1", "type": "system_start", "data": {"n": "old"}}) + "\n"
+    )
+    (tmp_path / "events.1.jsonl").write_text(
+        json.dumps({"timestamp": "t2", "type": "gesture_recognized", "data": {"n": "mid"}}) + "\n"
+    )
+    bus = EventBus(log_dir=tmp_path)  # opens events.jsonl
+    bus.emit(EventType.GESTURE_RECOGNIZED, {"n": "new"})
+    bus.close()
+
+    results = bus.read_logs(limit=100)
+    names = [e["data"].get("n") for e in results]
+    assert names == ["old", "mid", "new"]  # oldest archive first, current last
+
+
 def test_read_logs_type_filter(tmp_path: Path) -> None:
     """read_logs(event_type=...) returns only events matching that type."""
     bus = EventBus(log_dir=tmp_path)

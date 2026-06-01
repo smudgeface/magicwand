@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set active_page = "logs" %}
+{% block title %}Log — magicwand{% endblock %}
+
+{% block content %}
+<main>
+  <section class="card">
+    <div class="event-log-header">
+      <h3>Event Log</h3>
+      <span id="ws-status" class="ws-status">connecting...</span>
+    </div>
+    <p style="color:#8888aa; margin:0 0 0.75rem; font-size:0.9rem;">
+      Full history (persisted to <code>events.jsonl</code>), newest at the bottom.
+      New events stream in live.
+    </p>
+
+    <div class="filter-bar" id="log-filter-bar">
+      <button class="filter-btn active" data-type="">All</button>
+      <button class="filter-btn" data-type="gesture_recognized">Recognized</button>
+      <button class="filter-btn" data-type="gesture_rejected">Rejected</button>
+      <button class="filter-btn" data-type="action_fired">Actions</button>
+      <button class="filter-btn" data-type="action_failed">Failures</button>
+      <button class="filter-btn" data-type="system_start">Starts</button>
+      <span id="log-count" class="setting-status"></span>
+    </div>
+
+    <div id="log-list" class="event-log event-log-full">
+      <div class="log-empty">Loading…</div>
+    </div>
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/log-render.js"></script>
+<script src="/static/js/logs.js"></script>
+{% endblock %}

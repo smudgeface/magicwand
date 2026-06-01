@@ -40,15 +40,7 @@
     const log = document.getElementById('event-log');
     if (!log) return;
 
-    const entry = document.createElement('div');
-    entry.className = `log-entry log-${event.type}`;
-
-    const time = new Date(event.timestamp).toLocaleTimeString();
-    const badge = eventBadge(event.type);
-    const detail = eventDetail(event);
-
-    entry.innerHTML = `<span class="log-time">${time}</span>${badge}<span class="log-detail">${detail}</span>`;
-    log.appendChild(entry);
+    log.appendChild(LogRender.entryEl(event));
 
     // Trim old entries
     while (log.children.length > MAX_VISIBLE) {
@@ -57,47 +49,5 @@
 
     // Auto-scroll
     log.scrollTop = log.scrollHeight;
-  }
-
-  function eventBadge(type) {
-    const colors = {
-      gesture_recognized: 'badge-success',
-      action_fired: 'badge-success',
-      action_failed: 'badge-error',
-      gesture_rejected: 'badge-warning',
-      system_start: 'badge-info',
-      system_error: 'badge-error',
-    };
-    const labels = {
-      gesture_recognized: 'recognized',
-      action_fired: 'action',
-      action_failed: 'action failed',
-      gesture_rejected: 'rejected',
-      system_start: 'start',
-      system_error: 'error',
-    };
-    return `<span class="log-badge ${colors[type] || ''}">${labels[type] || type}</span>`;
-  }
-
-  function eventDetail(event) {
-    const d = event.data;
-    switch (event.type) {
-      case 'gesture_recognized':
-        return `${d.gesture_name} (${(d.confidence * 100).toFixed(0)}%)`;
-      case 'action_fired':
-        if (d.accessory) return `${d.accessory} → ${d.action} (${d.latency_ms}ms)`;
-        return `${d.url} → ${d.status_code} (${d.latency_ms}ms)`;
-      case 'action_failed':
-        if (d.accessory) return `${d.accessory} — ${d.error}`;
-        return `${d.url} — ${d.error}`;
-      case 'gesture_rejected':
-        return d.reason;
-      case 'system_start':
-        return `camera: ${d.camera_source}, port: ${d.server_port}`;
-      case 'system_error':
-        return d.message;
-      default:
-        return JSON.stringify(d);
-    }
   }
 })();

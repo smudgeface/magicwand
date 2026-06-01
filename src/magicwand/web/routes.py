@@ -88,6 +88,12 @@ async def admin_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(request, "settings.html")
 
 
+@router.get("/logs", response_class=HTMLResponse)
+async def logs_page(request: Request) -> HTMLResponse:
+    """Render the event log history page."""
+    return templates.TemplateResponse(request, "logs.html")
+
+
 @router.get("/api/health")
 async def health() -> dict:
     """Return service status and uptime in seconds."""
